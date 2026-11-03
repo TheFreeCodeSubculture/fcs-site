@@ -23,7 +23,11 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6";
 
 const SITE = "https://thefreecodesyndicate.github.io/fcs-site/";
-const ALLOWED_ORIGINS = ["http://localhost:8000", "https://thefreecodesyndicate.github.io"];
+const ALLOWED_ORIGINS = [
+  "http://localhost:8000",
+  "https://thefreecodesyndicate.github.io",
+  "https://thefreecodesubculture.github.io",
+];
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RESEND_AFTER_MS = 10 * 60 * 1000; // one confirm email per address and list per 10 minutes

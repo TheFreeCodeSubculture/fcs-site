@@ -17,7 +17,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const ALLOWED_ORIGINS = ["http://localhost:8000", "https://thefreecodesyndicate.github.io"];
+const ALLOWED_ORIGINS = [
+  "http://localhost:8000",
+  "https://thefreecodesyndicate.github.io",
+  "https://thefreecodesubculture.github.io",
+];
 const UTM = "utm_source=the_free_code_syndicate&utm_medium=referral";
 
 function cors(origin: string | null) {

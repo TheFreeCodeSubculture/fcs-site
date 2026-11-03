@@ -15,7 +15,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const REPO = "TheFreeCodeSyndicate/fcs-site";
 const WORKFLOW = "pages.yml";
-const ALLOWED_ORIGINS = ["http://localhost:8000", "https://thefreecodesyndicate.github.io"];
+const ALLOWED_ORIGINS = [
+  "http://localhost:8000",
+  "https://thefreecodesyndicate.github.io",
+  "https://thefreecodesubculture.github.io",
+];
 
 function cors(origin: string | null) {
   return {

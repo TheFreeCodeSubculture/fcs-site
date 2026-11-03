@@ -21,7 +21,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const ORIGINS = ["https://thefreecodesyndicate.github.io", "http://localhost:8000"];
+const ORIGINS = ["https://thefreecodesyndicate.github.io", "http://localhost:8000", "https://thefreecodesubculture.github.io"];
 const EVENTS = new Set(["join", "copy", "social", "calendar", "notify", "subscribe", "repo", "resource", "member-link", "link", "section"]);
 const BOTS = /bot|crawl|spider|slurp|headless|preview|lighthouse|pingdom|monitor|curl|wget|python|go-http|java\//i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

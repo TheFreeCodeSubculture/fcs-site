@@ -23,6 +23,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const ALLOWED_ORIGINS = [
   "http://localhost:8000",
   "https://thefreecodesyndicate.github.io",
+  "https://thefreecodesubculture.github.io",
 ];
 const ROLES = new Set(["editor", "admin"]);
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;

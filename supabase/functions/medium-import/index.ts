@@ -11,7 +11,11 @@ import { encodeBase64 } from "jsr:@std/encoding@1/base64";
 import { MAX_BYTES, REPO } from "./asset.js";
 import { handleAction } from "./importer.js";
 
-const ALLOWED_ORIGINS = ["http://localhost:8000", "https://thefreecodesyndicate.github.io", "https://TheFreeCodeSubculture.github.io/fcs-site", "https://thefreecodesubculture.github.io"];
+const ALLOWED_ORIGINS = [
+  "http://localhost:8000",
+  "https://thefreecodesyndicate.github.io",
+  "https://thefreecodesubculture.github.io",
+];
 
 function cors(origin: string | null) {
   return {
