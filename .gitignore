@@ -11,10 +11,26 @@ node_modules/
 Thumbs.db
 .shots/
 
-# Written by the Supabase CLI (`supabase functions deploy`): link state,
-# version stamps. Not part of the function source or the site.
-supabase/.temp/
 
 # Built by tools/blog-build.mjs on every deploy
 blog/
 sitemap.xml
+.agents
+.codex
+.opencode
+skills-lock.json
+
+# Keep agent/skill files local, but allow GitHub workflows.
+.github/*
+!.github/workflows/
+!.github/workflows/*.yml
+
+# Backend build output and local secrets
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.import
+backend/coverage/
+
+# Staged frontend artifact for GitHub Pages
+_site/
