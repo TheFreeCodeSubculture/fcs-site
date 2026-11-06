@@ -5,7 +5,7 @@ import {
   rehostImages,
   assembleImport,
   handleAction,
-} from "../../supabase/functions/medium-import/importer.js";
+} from "../../backend/src/integrations/medium/importer.js";
 
 const FEED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
@@ -71,17 +71,6 @@ const HTTP_FEED_XML = `<?xml version="1.0" encoding="UTF-8"?>
     </item>
   </channel>
 </rss>`;
-
-// --- Step 1: Copy-agreement test ---
-test("the importer copy of asset.js still agrees with upload-asset copy", async () => {
-  const a = await import("../../supabase/functions/upload-asset/asset.js");
-  const b = await import("../../supabase/functions/medium-import/asset.js");
-  assert.equal(b.MAX_BYTES, a.MAX_BYTES);
-  assert.equal(b.REPO, a.REPO);
-  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  const d = new Date(Date.UTC(2026, 9, 17));
-  assert.equal(b.assetPath(png, d, "x"), a.assetPath(png, d, "x"));
-});
 
 // --- Function 1: selectSections ---
 test("selectSections keeps requested ids in their original story order", () => {

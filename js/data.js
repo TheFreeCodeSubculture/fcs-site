@@ -4,7 +4,7 @@
  * PRINCIPLES and CONTRIBUTION_LANES are fixed page copy
  * and live here permanently.
  *
- * The SEED_* arrays are a FALLBACK used only when Supabase is
+ * The SEED_* arrays are a FALLBACK used only when the backend is
  * unreachable or unconfigured. They are not the source of truth any
  * more — the database is. Edit content in the admin panel at /admin,
  * not in this file.

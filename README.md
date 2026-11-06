@@ -1,423 +1,148 @@
-# The Free Code Subculture — website
+# The Free Code Subculture — website & backend
 
-A static, frontend-only site for The Free Code Subculture, with a
-Supabase-backed admin panel so a maintainer can update content without
-touching code. No build step, no framework, no bundler.
+A static site for The Free Code Subculture with a self-hosted admin backend.
+The frontend has no build step, framework or bundler. The backend is Node,
+TypeScript, Express and PostgreSQL, deployed under PM2.
 
-## Run it locally
+| Part | Where |
+|---|---|
+| Frontend | `https://thefreecodesubculture.github.io/fcs-site/` |
+| Backend API | `https://fcs-api.akos-archives.in` |
+| Backend source | `backend/` |
+| VPS | `31.97.137.19` |
+| Frontend deploy | GitHub Pages |
+| Backend deploy | self-hosted GitHub Actions runner |
 
-```bash
-python -m http.server 8000    # Windows: `python`, not `python3`
+## Repository layout
+
+```text
+index.html, admin.html, subscribe.html, privacy.html
+css/, js/, assets/, data/          frontend
+js/api.js                          the only module that talks to the backend
+backend/                           Node/TypeScript/PostgreSQL API
+tools/                             build and browser-check helpers
 ```
 
-Then open <http://localhost:8000>. The site runs entirely from the seed
-data in `js/data.js` when no database is configured, so you can develop
-the front end before Supabase exists.
-
-Run the tests with:
+## Run the frontend locally
 
 ```bash
-npm test
+python -m http.server 8000
 ```
 
-Two headless browser checks live in `tools/`. They need Playwright, which is
-deliberately not a project dependency:
+Open <http://localhost:8000>. The site reads the API configured in
+`js/config.js` and falls back to the seed data in `js/data.js` when the API
+is unreachable.
+
+If you use the hosted backend, the frontend origin must be
+`http://localhost:8000` (not `127.0.0.1`) because that is what the API's CORS
+allowlist contains.
+
+## Run the backend locally
+
+Requirements: Node 22 and PostgreSQL 16.
+
+```bash
+cd backend
+cp .env.example .env
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+The API listens on `http://127.0.0.1:5050`. See `backend/README.md` for the
+environment variables and the available routes.
+
+## Tests
+
+```bash
+npm test                 # frontend unit tests
+cd backend
+npm run typecheck
+npm run lint
+npm test                 # unit tests
+npm run test:integration # needs a test PostgreSQL database
+npm run build
+```
+
+The frontend browser check is optional and needs Playwright:
 
 ```bash
 npm install --no-save --no-package-lock playwright
-node tools/verify-page.mjs      http://localhost:8000/
-node tools/verify-admin.mjs     http://localhost:8000/
-node tools/verify-deeplinks.mjs http://localhost:8000/
+node tools/verify-page.mjs http://localhost:8000/
 ```
 
-## The admin panel
+## Admin panel
 
-<http://localhost:8000/admin.html> locally, `/admin` once deployed. Sign in
-with a Supabase account.
+<http://localhost:8000/admin.html> locally; `/admin` once deployed.
 
-A sidebar lists one page per kind of content, each at its own address
-(`admin.html#/core`, `#/events`, ...):
-
-| Page | What it edits |
-|------|---------------|
-| Events | The Kanban board: Draft, Scheduled, Live, Done |
-| Class schedule | Weekly recurring sessions (the countdown and week strip) |
-| Core members | Leads and mentors, including Move to alumni |
-| Study groups, Resources, Social links | The matching public sections |
-| Repositories | Every repo in the GitHub organisation: show it under Projects, under Resources, or hide it |
-| Subscribers (admins only) | Email lists per event and for all events; send updates |
-| Team (admins only) | Who has access, and approving new accounts |
-
-Clicking a row opens an editing drawer with a **live preview** of the card,
-drawn by the same code as the public page (`js/render.js`). Lists reorder
-by dragging the handle or with the arrow buttons. Delete asks for a second
-click. `/` focuses search and `n` starts a new item.
-
-**The public page derives each event's status from its own timestamp**, so
-a past event shows FINISHED even if nobody moved its card.
-
-### Access
-
-- New accounts start with **no access** until an admin approves them on the
-  Team page. Editors add and edit; admins can also delete and manage the team.
-- The database refuses role changes by anyone but an admin, and never lets
-  the last admin be removed (`supabase/migrations/003_team_roles.sql`).
-- **Remove** on the Team page deletes someone's login entirely, which ends
-  their sessions; the content they edited stays. Admins only, and never
-  yourself (`009_remove_member.sql`). Invite them again to bring them back.
-- Removing someone, or setting them to **No access**, signs them out at once
-  if they have the panel open (Realtime on `profiles`, `010_realtime_profiles.sql`),
-  and the sign-in screen tells them why.
-- To stop strangers creating accounts at all, turn off **Authentication →
-  Sign In / Providers → Allow new users to sign up** in Supabase and invite
-  people from **Authentication → Users** instead.
-
-## Repositories page
-
-Admin > **Repositories** lists every public repo in the GitHub
-organisation. For each: show it under Projects, under Resources, or hide
-it; **Pin to top** (pinned projects come first on the site, in the order
-set with the arrows); and link it to a **study group**, which lists it on
-that group's card. New repos show as Projects and archived ones are
-hidden until someone chooses otherwise.
-
-**Refresh now** re-reads GitHub and redeploys the site through the
-`refresh-site` Edge Function, so a new repo shows without waiting for the
-30-minute run. It needs one secret, set once:
-
-1. GitHub > Settings > Developer settings > Fine-grained tokens > Generate:
-   resource owner **TheFreeCodeSubculture**, only the **fcs-site**
-   repository, permission **Actions: Read and write**, nothing else.
-2. Supabase > Edge Functions > Secrets: `GITHUB_DISPATCH_TOKEN` = the token.
-
-## Blog
-
-Admin > **Blog** opens each post as a full, Notion-style page
-(`js/blog-editor.js`): a cover you can upload and drag to reposition, an
-icon (emoji, a pixel icon in one of ten colours, or an uploaded image),
-the title, properties (address, author, summary), then blocks.
-
-- **`/`** opens the block menu: text, headings 1-4, bulleted, numbered
-  and to-do lists, toggles and toggle headings, quote, callout, divider,
-  table, table of contents, 2-4 columns, image, YouTube video, web
-  bookmark, code, block and inline equations (KaTeX), mentions, dates and
-  emoji. **`:`** suggests emoji (`:rocket`), **`@`** mentions a core
-  member or a date. While a menu is open the page does not scroll.
-- **Markdown shortcuts** as you type: `# `..`#### `, `- `, `1. `, `a. `,
-  `[] `, `> ` toggle, `" ` quote, ```` ``` ````, `---`, `$$ `, and inline
-  `**bold**`, `*italic*`, `++underline++`, `` `code` ``, `~~strike~~`,
-  `==highlight==`, `$math$`.
-- **Selecting text** shows a bar: turn into, bold, italic, underline,
-  strike, code, equation, link, text and background colour, and more
-  (highlight, superscript, subscript, clear formatting).
-- **Each block** has a `+` (Alt-click adds above) and a grip: drag to move,
-  click (or Ctrl+/) for a searchable menu: turn into, colour, alignment,
-  list format, insert above/below, duplicate, move, copy link (headings),
-  delete. **Tables** have row and column handles (insert, move, duplicate,
-  clear, delete, column alignment). **Images** align and resize by their
-  edges.
-- **Authors**: a post starts with whoever created it; the Authors row adds or
-  removes club members (every admin and editor, with the photo from their
-  core-member card, else their GitHub avatar, else initials) and guest
-  authors by name. They show as an avatar group under the published title.
-  `@` mentions the same people.
-- **Ctrl+F** finds and replaces. Ctrl+Z / Ctrl+Shift+Z undo and redo.
-- The **⋯ menu**: the post's font (Default, Mono = Archivo Mono, Technical
-  = Latin Modern Mono, Garet, all from the brand guide), small text, full width,
-  lock page, zoom, copy link, copy as Markdown, duplicate as a new draft,
-  import Markdown, export as Markdown, HTML or PDF, version history,
-  unpublish, delete.
-
-Drafts save as you type; a published post changes only when you press
-**Update**.
-
-Posts are stored as Markdown (the syntax is listed at the top of
-`js/lib/markdown.js`). The deploy turns each published post into a static
-page, `blog/<slug>/`, with its own title and link preview, and writes
-`sitemap.xml` (`tools/blog-build.mjs`; neither is committed). Publishing
-or updating a live post starts a deploy through `refresh-site`, so it
-shows in about a minute. `npm ci` once, then `node tools/blog-build.mjs`,
-previews locally. KaTeX and highlight.js are vendored under `js/vendor/`;
-the site itself has no build step.
-
-**Link previews.** The same build draws a 1200x630 card for every post
-(`blog/<slug>/og.jpg`: title, summary, authors, date, cover and icon), for
-the blog (`blog/og/blog.jpg`) and for the home page (`blog/og/home.jpg`,
-also used by `privacy.html`), with `tools/og.mjs` (satori and sharp, the
-only npm dev dependencies). Cards are redrawn every deploy, so they follow
-edits and the newest post; a post's card URL carries `?v=<last edit>` so
-WhatsApp, Discord and X fetch the new one. To refresh a preview that was
-already shared: Facebook's Sharing Debugger ("Scrape again"), LinkedIn's
-Post Inspector, or Telegram's @WebpageBot.
-
-Page and callout icons: emoji are drawn with [Twemoji](https://github.com/jdecked/twemoji)
-(CC-BY 4.0, credited in the blog footer) from jsDelivr, so they look the same on
-every system; the picker's list is `js/vendor/emoji/emoji-groups.json` (from
-`unicode-emoji-json`, MIT). The Icons tab is every pixelarticons icon
-(`assets/pixel-icons.svg`, rebuilt by `tools/build-pixel-icons.mjs`), in
-Notion's ten colours (`icon:<name>:<colour>`, migration `024`). Latin Modern
-Mono is vendored in `assets/fonts` (GUST Font License). Garet (Book and Heavy, by Spacetype)
-is there too under Spacetype's free-font EULA, which allows embedding in web
-pages but not redistributing or modifying the files; see
-`assets/fonts/GARET-LICENSE.txt`.
-
-Post text lives in Supabase (`blog_posts`, migration `022`). **Images**
-are committed to the public `TheFreeCodeSubculture/fcs-assets` repository
-by the `upload-asset` Edge Function and served by jsDelivr at an address
-pinned to the commit, so it never changes and never needs a cache purge.
-Only editors and admins can upload; JPG, PNG or WebP up to 2 MB (the
-panel shrinks pictures to WebP first). Everything in that repository is
-public and permanent, so never upload anything private. Set once:
-
-1. Run `supabase/migrations/022_blog_posts.sql` to `028_profile_member_link.sql`
-   in the SQL editor.
-2. GitHub > Fine-grained tokens > Generate: resource owner
-   **TheFreeCodeSubculture**, only the **fcs-assets** repository,
-   permission **Contents: Read and write**, nothing else.
-3. Supabase > Edge Functions > Secrets: `GITHUB_ASSETS_TOKEN` = the token.
-4. For the cover picker's **Unsplash** tab: create an app at
-   https://unsplash.com/oauth/applications (free, 50 searches an hour
-   until Unsplash approves it for production) and add its **Access Key** as
-   the secret `UNSPLASH_ACCESS_KEY`. The key stays in the `unsplash` Edge
-   Function; photos are hotlinked from Unsplash and their photographers
-   credited, as Unsplash asks.
-
-The cover picker's **Gallery** (colours, gradients, textures, Webb, NASA and
-Met Museum images) is `assets/cover-gallery.json`, made by
-`node tools/build-cover-gallery.mjs`: the colours and textures are drawn
-into `assets/covers/`; the art and space images are public domain or
-CC BY (credited in the picker) and load from their own sites.
-
-Authors are named from core-member cards. Each admin and editor links their
-own login to their card once (Team page, or the prompt in a post's Authors
-row; the card is guessed from their email). Only they can change it.
-
-### Medium import
-
-Admin > **Blog** has an **Import from Medium** button in the header, and the editor's **⋯** menu has **Import from Medium**. There is no Medium account or OAuth involved: Medium's API is closed, so the importer reads only the public RSS feed (`medium.com/feed/@handle`) and the public story address.
-
-A feed carries only the author's ten newest stories (Medium does not paginate feeds). Pasting a story address reads the feed that address points at — the author's feed for a `medium.com/@handle/...` address, the publication's own feed for a publication domain — so it reaches an older story only when that feed still lists it. A story outside both its author's and its publication's newest ten cannot be reached at all: the story page and Medium's oEmbed endpoint both refuse a plain fetch, so the public feed is the only surface. Member-only stories are refused with the reason; stories from authors in the Partner Program are published as teasers in the RSS feed and are also refused.
-
-**Fidelity:**
-- **Lost:** code block language tags (Medium feeds emit plain `<pre>`), GitHub gists (a gist is a `<script>`, and the feed carries none), native Medium embeds, and LaTeX equations (the feed carries only the image Medium rendered).
-- **Preserved:** headings, paragraphs, blockquotes, lists, dividers, inline formatting (bold, italic, links, inline code), and third-party embeds recovered from Embedly: a YouTube video becomes a video block, and a tweet, Vimeo or CodeSandbox embed keeps its recovered address as an ordinary link.
-- **Images:** copied into `TheFreeCodeSubculture/fcs-assets` by the `medium-import` function itself — its own copy of the same asset helpers, the same `GITHUB_ASSETS_TOKEN` and the same 2 MB sniff rules as a normal upload — and served from `cdn.jsdelivr.net`. Images larger than 2 MB, a GIF, an SVG, or images beyond the 40-image cap on one story stay hotlinked to Medium, and the import summary says so.
-
-An optional attribution paragraph ("Originally published on Medium" linked to the story URL) is ticked by default, appended at the end of the post, and can be edited or deleted. Regardless of whether attribution is included, the story's canonical address is saved in `source_url` for provenance and duplicate detection, and shown read-only under **Properties > Source**.
-
-Import requires confirming that you hold the rights to publish the story. Every import lands as an unpublished draft.
-
-## Analytics
-
-Admin > **Analytics** shows how the public site is used, over the last
-24 hours, 7, 30 or 90 days, compared with the period before: visitors,
-new visitors, visits, page views, bounce rate (one page, under 10
-seconds), time in view, pages per visit; Visitors by device (stacked areas)
-and Page views or Visits (bars), by hour or day;
-new vs returning and devices; what people did (join links, copy, email
-signup, calendar, projects...), which sections they stopped on,
-referrers, `utm_` campaigns, pages and rough regions.
-
-How it works, all first-party and free:
-
-- `js/track.js` (public pages only, never the admin) sends small beacons
-  to the `collect` Edge Function: a page view, the time the tab was
-  actually visible (on leaving, and every 30 seconds), named clicks, and
-  sections that stayed mid-screen for a second.
-- No cookies. A visitor is a hash of a random daily salt + IP + browser,
-  made on the server; the IP is never stored and old salts are deleted,
-  so visitors cannot be followed across days. "New" comes from a single
-  "been here before" flag in the browser's localStorage.
-- Not counted: bots, other sites,
-  and localhost (add `?track=1` to test locally). Do Not Track and Global
-  Privacy Control are not applied (Brave and Firefox send them by default,
-  which would hide most phone visitors); nothing personal is stored.
-  Regions come from the browser's timezone, because the host passes no
-  country and a VPN would hide the real one anyway. Add `?trackdebug=1` to
-  the site address to see on screen whether a visit is being counted.
-- Raw rows are readable only through `analytics_report()`, and only by
-  admins and editors an admin has switched on (Team page, "Analytics:
-  on/off"). Rows older than 13 months are deleted nightly (`pg_cron`).
-- Charts follow the look of neobrutalism.dev/charts, drawn in plain SVG.
-
-**Campaigns:** Analytics > *Make a tagged link* builds the address to
-share for each place (Instagram, WhatsApp, Discord, YouTube, LinkedIn, X,
-Facebook, Telegram, Reddit, Threads, Snapchat, Pinterest, TikTok, email,
-QR codes and print, or any name): it adds `utm_source`, `utm_medium` and
-an optional `utm_campaign`, lowercased and hyphenated, and copies it.
-Visits through it appear under Campaigns.
-
-Migrations `016`-`019`; Edge Function `supabase/functions/collect`.
-
-## Link icons
-
-Every link on the site and in the panel (social links, a core member's
-website, resources, event and study-group links) gets its icon the same
-way (`linkIcon` in `js/render.js`):
-
-1. a **pixel icon** when the site is known from the link itself: Discord,
-   Instagram, WhatsApp, GitHub, X/Twitter, LinkedIn, YouTube, and email;
-2. otherwise that site's **favicon**, from Google's favicon service (only
-   the domain is sent);
-3. otherwise, if the site has no favicon, the **default** link icon.
-
-To add a known site: draw a 24px symbol in `assets/icons.svg` and add its
-domain to `KNOWN_SITES`.
+- New accounts are invite-only.
+- Admins manage editors and analytics access on the Team page.
+- Editors can add and edit; only admins can delete.
+- The content pages are Events, Class schedule, Core members, Study groups,
+  Resources, Social links, Repositories and Blog.
 
 ## Where content lives
 
 | Content | Source |
-|---------|--------|
-| Principles, contribution lanes | `js/data.js`, fixed page copy |
-| Events, class schedule, resources, study groups, social links, core members | Supabase, editable at `/admin` |
-| Projects | GitHub API, live at page load |
-| Fallback for all database content | the `SEED_*` arrays in `js/data.js` |
+|---|---|
+| Principles, contribution lanes | Fixed page copy in `js/data.js` |
+| Events, schedule, resources, study groups, social links, core members, blog | PostgreSQL through the backend API |
+| Projects | GitHub API, refreshed into `data/github.json` by the deploy |
+| Fallback for database content | the `SEED_*` arrays in `js/data.js` |
 
-The `SEED_*` arrays are a **fallback only**. Edit content in the admin panel,
-not in code.
+The `SEED_*` arrays are a fallback only. Edit content in the admin panel, not
+in code. The admin panel writes to the backend API.
 
-## Setting up Supabase
+## CI/CD
 
-1. Create a free project at <https://supabase.com>.
-2. Run `supabase/schema.sql` in the SQL editor, then each file in
-   `supabase/migrations/` in number order.
-3. Paste the project URL and anon key into `js/config.js`.
-4. Sign up, then promote yourself to admin:
-   ```sql
-   update public.profiles set role = 'admin' where email = 'you@example.com';
-   ```
-5. For each other maintainer, create an account under **Authentication →
-   Users**, then approve it on the admin panel's Team page. New accounts have
-   no access until approved.
+### Pull requests
 
-### Email: password resets and invites
+`.github/workflows/ci.yml` runs on every pull request:
 
-Both the **Email me a reset link** button and **Send invite** on the Team
-page send email through Supabase Auth. Supabase's built-in email service
-only delivers to members of your Supabase organisation's team, a few an
-hour, and is not meant for production. To email anyone else, give Supabase
-an SMTP server. Free, with no domain needed, using the club Gmail:
+- **Frontend tests** on a GitHub-hosted runner: `npm ci`, `npm test`.
+- **Backend tests** on a GitHub-hosted runner with a PostgreSQL 16 service:
+  lint, typecheck, migrations, unit and integration tests, build.
 
-1. On the Google account (`thefreecodesyndicate@gmail.com`) turn on
-   **2-Step Verification**, then create an **App password**
-   (Google Account → Security → App passwords).
-2. Supabase → **Authentication → Emails → SMTP Settings** → enable custom SMTP:
-   - Host `smtp.gmail.com`, port `465`
-   - Username: the full Gmail address; password: the app password
-   - Sender email: the same Gmail address; sender name: `The Free Code Subculture`
-3. Install the branded email templates (invite, reset password, password
-   changed, email changed, confirm signup, magic link, change email,
-   verification code). They live in `tools/email-templates.mjs`; the
-   generated HTML is in `supabase/email/`. Either paste each file into
-   **Authentication → Emails → Templates**, or push them all at once with a
-   personal access token from <https://supabase.com/dashboard/account/tokens>:
-   ```bash
-   SUPABASE_ACCESS_TOKEN=sbp_... node tools/email-templates.mjs --push
-   ```
-   Pushing also turns on the "password changed" and "email changed"
-   security notices.
+A pull request never deploys anything. Merge only after the two checks pass
+and branch protection is enabled.
 
-An invited person accepts the invite, chooses a password (typed twice), and
-lands back on the sign-in page with their email filled in. From then on
-they sign in with that email and password, with the role the admin chose.
+### Merge to `master`
 
-Gmail allows about 500 emails a day, far more than a club needs. The invite
-and reset links return to `/admin.html`, which must be listed under
-**Authentication → URL Configuration → Redirect URLs** (it is, for both
-localhost and the Pages URL).
+- `.github/workflows/deploy-backend.yml` runs only when `backend/**` changes.
+  It runs the CI workflow first, then deploys on the self-hosted
+  `fcs-deploy` runner:
+  - builds to a new `/srv/fcs-api/releases/<commit>/`
+  - runs database migrations
+  - switches `/srv/fcs-api/current`
+  - reloads PM2
+  - checks `/health`
+  - rolls back to the previous release if the health check fails
+- `.github/workflows/pages.yml` builds the static blog and link-preview
+  cards, stages only the frontend into `_site/`, and deploys GitHub Pages.
+  It runs on `master`, on a 30-minute schedule, and manually.
 
-Invites go through the `invite-member` Edge Function
-(`supabase/functions/invite-member/`): it checks the caller is an admin,
-sends the invite and sets the chosen role. The service-role key it uses
-stays inside Supabase. Deploy changes with the Supabase CLI or MCP.
+## Backend security model
 
-### Event updates: calendar feed and email lists
+- The frontend holds no database credentials and no service keys.
+- Public API routes only return published/active rows.
+- Admin routes require a JWT; editor/admin rules are enforced server-side.
+- Subscriptions and raw analytics are admin-only.
+- Passwords are bcrypt hashes. Refresh tokens are hashed in the database and
+  rotated on use.
+- CORS allows only the published frontend origin and localhost development.
+- A Content-Security-Policy on every page allows only this site, the backend
+  origin, GitHub and Discord.
 
-**Calendar.** The deploy workflow writes `events.ics` every 30 minutes
-(`tools/events-feed.mjs`). "Add to your calendar" on the events section
-subscribes Google, Apple or Outlook Calendar to it, so new and changed
-events appear on their own. Each event card still offers a one-off
-"Add to calendar".
-
-**Email.** "Email me about events" and each event's "Email me updates"
-sign people up through the `event-mail` Edge Function
-(`supabase/functions/event-mail/`). They get a confirmation email and
-count only once they click it. Admins see the lists on the **Subscribers**
-page, can add addresses directly (counted straight away, no confirmation),
-send a test to themselves, and send a plain-text update:
-
-- an event's update goes to that event's list and the all-events list;
-- an "all events" update goes to everyone on any list;
-- one email per person, each with its own unsubscribe link
-  (`subscribe.html`), and the send is recorded in the activity log.
-
-The function sends through Gmail with the club's app password. Set it once
-under **Supabase → Edge Functions → Secrets**:
-
-| Name | Value |
-|------|-------|
-| `GMAIL_USER` | `thefreecodesyndicate@gmail.com` |
-| `GMAIL_APP_PASSWORD` | the 16-character app password (the same one as the Auth SMTP settings) |
-
-Lists and sends are admin-only in the database
-(`011_event_subscriptions.sql`): visitors and editors cannot read them.
-Signups are capped at 100 unconfirmed an hour, one confirmation email per
-address every 10 minutes, and Gmail allows about 500 emails a day.
-
-### Security model
-
-- The anon key in `js/config.js` is public by design. Everything it can do
-  is decided by Row Level Security in Postgres:
-  - visitors read only published rows (no drafts, hidden members or
-    inactive sessions; `004_hide_unpublished.sql`);
-  - editors add and edit, admins also delete, and new accounts have no
-    access until approved (`003_team_roles.sql`);
-  - the anon role has no write grants at all;
-  - the role helper lives in a `private` schema the API does not expose,
-    and trigger functions cannot be called over RPC (`005_advisor_fixes.sql`).
-- Supabase's security and performance advisors report nothing to fix
-  except leaked-password protection, which is a password-policy choice.
-- Both pages carry a Content-Security-Policy `<meta>`: scripts from this
-  site only, network calls only to Supabase, GitHub and Discord. If you add
-  another service, add its origin to `connect-src` in both `index.html`
-  and `admin.html`.
-- The admin panel refuses to run inside another site's frame.
-
-The anon key is designed to be public and is safe to commit. All authorisation
-is enforced by Row Level Security in Postgres. **Never put the service-role key
-in `js/config.js`** — it would be readable by anyone who visits the site.
-
-## Deploying to GitHub Pages
-
-The site deploys with GitHub Actions (`.github/workflows/pages.yml`), on
-every push to `master`, every 30 minutes, and on demand from the Actions
-tab.
-
-One-time setup: **Settings → Pages → Build and deployment → Source:
-GitHub Actions**.
-
-Each run runs the unit tests, then writes `data/github.json` (the
-organisation's repositories and the latest commit) with the workflow's own
-token, and publishes it with the site. Visitors read that file instead of
-calling GitHub's API, so the 60-requests-an-hour limit per visitor no
-longer applies. The committed `data/github.json` is a placeholder: locally,
-or if the workflow ever stalls for more than three hours, the page falls
-back to the live API.
-
-GitHub pauses scheduled workflows in repositories with no activity for 60
-days; any push re-enables them, and the page falls back to the live API in
-the meantime.
-
-`.nojekyll` makes Pages serve the files as-is.
+Secrets live in `/srv/fcs-api/shared/.env` on the VPS, mode `600`, owned by
+the `fcs` user. They are never committed.
 
 ## Notes and limits
 
-- Visitors read GitHub data from `data/github.json`, refreshed by the deploy
-  workflow every 30 minutes. Only if that file is missing or stale does the
-  browser call GitHub's API directly (60 requests an hour per visitor IP);
-  those answers are cached for ten minutes, and if the limit is hit the
-  Projects section degrades to a link to the organisation page.
-- The Supabase free project pauses after a period of inactivity. Because every
-  read falls back to seed data, that degrades to a stale-but-working page rather
-  than a broken one. Reactivate it from the Supabase dashboard.
-- Schedule edits appear on the next visitor reload. There is no live push.
+- The backend runs as the `fcs` user under PM2; the PM2 service is enabled at
+  boot.
+- PostgreSQL backups run daily and are restore-tested.
+- GitHub Pages is the public frontend. The API is a separate HTTPS origin.
+- If the API is unreachable, public content falls back to the seed data; the
+  admin panel shows an error instead of silently losing edits.
+- The blog is written in PostgreSQL and built into static pages on each
+  deploy. Images are committed to the public `fcs-assets` GitHub repository.

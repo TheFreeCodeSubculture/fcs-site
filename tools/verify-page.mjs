@@ -3,7 +3,7 @@
  * ------------------------------------------------------------------
  * A one-off headless check of the public page. Not part of the test
  * suite and not shipped to the site — it exists because two real bugs
- * (a silently-unloaded Supabase client, and a nav with no active link
+ * (a silently-unloaded client module, and a nav with no active link
  * at the top of the page) were invisible to unit tests and only showed
  * up in a real browser.
  *

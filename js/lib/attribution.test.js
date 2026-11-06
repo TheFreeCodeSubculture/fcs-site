@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { attributionLine, isAttributionLine, isSourceURL, lineAddress, normaliseAttribution } from "./attribution.js";
-import { attributionLine as serverAttributionLine, lineAddress as serverLineAddress } from "../../supabase/functions/medium-import/medium.js";
+import { attributionLine as serverAttributionLine, lineAddress as serverLineAddress } from "../../backend/src/integrations/medium/medium.js";
 
 /** Characters the markdown dialect would eat, or that cannot sit raw in a link:
  *  the same set the module encodes. */
