@@ -8,10 +8,10 @@
  *
  *   node tools/blog-build.mjs
  *
- * Reads posts with the public anon key, so it only ever sees published
- * ones. blog/ and sitemap.xml are build output and are not committed.
- * If Supabase is unreachable the build fails, so a bad run never
- * replaces a good site with an empty blog.
+ * Reads posts from the public API, so it only ever sees published ones.
+ * blog/ and sitemap.xml are build output and are not committed. If the
+ * API is unreachable the build fails, so a bad run never replaces a good
+ * site with an empty blog.
  * ------------------------------------------------------------------
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,21 +21,18 @@ import { linkMetaFor } from "./link-meta.mjs";
 import { postCard, siteCard } from "./og.mjs";
 
 const config = readFileSync("js/config.js", "utf8");
-const url = /supabaseUrl:\s*"([^"]+)"/.exec(config)?.[1];
-const key = /supabaseAnonKey:\s*"([^"]+)"/.exec(config)?.[1];
-if (!url || !key) throw new Error("Supabase is not configured in js/config.js");
+const url =
+  process.env.API_BASE_URL ||
+  /apiBaseUrl:\s*"([^"]+)"/.exec(config)?.[1];
+if (!url) throw new Error("The API is not configured in js/config.js");
 
-const res = await fetch(
-  `${url}/rest/v1/blog_posts?select=*&status=eq.published&order=published_at.desc`,
-  { headers: { apikey: key, Authorization: `Bearer ${key}` } }
-);
-// Until migration 022 is run there is no table (404); build an empty blog.
-const posts = res.status === 404 ? [] : res.ok ? await res.json() : null;
+const res = await fetch(`${url}/api/public/blog-posts`);
+const posts = res.ok ? await res.json() : null;
 if (!posts) throw new Error(`blog_posts -> ${res.status}`);
 
 // The club's links, for the footer's Connect column (published ones only).
-const socialRes = await fetch(`${url}/rest/v1/social_links?select=label,platform,url,is_published&order=sort_order`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
-const social = socialRes.ok ? (await socialRes.json()).filter((l) => l.is_published !== false) : [];
+const socialRes = await fetch(`${url}/api/public/social-links`);
+const social = socialRes.ok ? await socialRes.json() : [];
 
 // Bookmark cards: each linked page's title, description and image.
 for (const post of posts) post.link_meta = await linkMetaFor(bookmarkURLs(post.body));

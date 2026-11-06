@@ -16,12 +16,14 @@
  */
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import satori from "satori";
 import sharp from "sharp";
 import { twemojiURL, isEmoji } from "../js/lib/markdown.js";
 import { SITE } from "../js/lib/blog-pages.js";
 
 const require = createRequire(import.meta.url);
+// Satori's ESM build references __dirname at import time; its CJS build does
+// not, so load that one. Both are the same library.
+const satori = require("satori").default;
 const font = (pkg, file) => readFileSync(require.resolve(`${pkg}/files/${file}`));
 const FONTS = [
   ...[500, 600, 800].map((weight) => ({ name: "Archivo", weight, style: "normal", data: font("@fontsource/archivo", `archivo-latin-${weight}-normal.woff`) })),
