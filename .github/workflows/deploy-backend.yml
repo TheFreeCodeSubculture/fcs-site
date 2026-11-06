@@ -1,0 +1,80 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to VPS
+    needs: ci
+    runs-on: [self-hosted, linux, x64, fcs-deploy]
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+          release="/srv/fcs-api/releases/${GITHUB_SHA}"
+          rm -rf "$release"
+          mkdir -p "$release"
+          cp -a backend/dist "$release/"
+          cp -a backend/package.json backend/package-lock.json backend/ecosystem.config.cjs "$release/"
+          cp -a backend/migrations "$release/"
+          cd "$release"
+          npm ci --omit=dev --no-audit --no-fund
+
+      - name: Apply migrations
+        run: |
+          set -euo pipefail
+          cd "/srv/fcs-api/releases/${GITHUB_SHA}"
+          FCS_ENV_FILE=/srv/fcs-api/shared/.env node dist/db/migrate.js
+
+      - name: Activate and verify
+        run: |
+          set -euo pipefail
+          release="/srv/fcs-api/releases/${GITHUB_SHA}"
+          previous="$(readlink -f /srv/fcs-api/current || true)"
+          ln -sfn "$release" /srv/fcs-api/current
+          cd /srv/fcs-api/current
+          pm2 startOrReload ecosystem.config.cjs --update-env
+          pm2 save
+
+          if ! curl -fsS --retry 5 --retry-delay 2 http://127.0.0.1:5050/health; then
+            echo "Health check failed; rolling back to ${previous:-nothing}"
+            if [ -n "$previous" ]; then
+              ln -sfn "$previous" /srv/fcs-api/current
+              cd /srv/fcs-api/current
+              pm2 startOrReload ecosystem.config.cjs --update-env
+              pm2 save
+            fi
+            exit 1
+          fi
