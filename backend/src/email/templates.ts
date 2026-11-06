@@ -41,17 +41,29 @@ const button = (label: string, href: string) => `
   <a href="${esc(href)}" style="display:block;background:${ACCENT};border:3px solid ${INK};padding:14px 26px;font-family:${HEAD};font-size:15px;letter-spacing:0.5px;text-transform:uppercase;color:${INK};text-decoration:none;">${esc(label)} &rarr;</a>
 </td></tr></table>`;
 
-const footer = `You received this because someone used the FCS admin panel. If that was not you, ignore this email.`;
+const footer = `You received this because someone used your email address on the FCS site. If that was not you, ignore this email.`;
 
 export function resetEmail(name: string, url: string) {
-  const subject = "Reset your FCS admin password";
+  const subject = "Reset your FCS password";
   const html = layout("// PASSWORD", "Reset your password",
     para(`Hi ${esc(name)},`) +
     para("Use the button below to choose a new password. The link expires in one hour and can be used once.") +
     button("Choose a new password", url) +
     para(`<span style="font-size:13px;color:${MUTED};">If you did not ask for this, you can ignore this email. Your password will not change.</span>`),
     footer);
-  const text = `Hi ${name},\n\nReset your FCS admin password here (expires in one hour):\n${url}\n\nIf you did not ask for this, ignore this email.`;
+  const text = `Hi ${name},\n\nReset your FCS password here (expires in one hour):\n${url}\n\nIf you did not ask for this, ignore this email.`;
+  return { subject, html, text };
+}
+
+export function verificationEmail(name: string, url: string) {
+  const subject = "Verify your FCS member account";
+  const html = layout("// MEMBER", "Verify your email",
+    para(`Hi ${esc(name)},`) +
+    para("Confirm your email address to activate your FCS member account. The link expires in 24 hours and can be used once.") +
+    button("Verify my email", url) +
+    para(`<span style="font-size:13px;color:${MUTED};">If you did not create an account, ignore this email and nothing will happen.</span>`),
+    footer);
+  const text = `Hi ${name},\n\nVerify your FCS member account here (expires in 24 hours):\n${url}\n\nIf you did not create an account, ignore this email.`;
   return { subject, html, text };
 }
 

@@ -14,6 +14,7 @@ describe.skipIf(!hasTestDatabase)("API integration", () => {
   let adminRefresh = "";
   let eventId = "";
   let postId = "";
+  let memberToken = "";
 
   async function login(email: string, password: string) {
     const response = await request(app)
@@ -33,8 +34,8 @@ describe.skipIf(!hasTestDatabase)("API integration", () => {
         activity_log, analytics_events, analytics_pageviews, analytics_salts,
         subscriptions, email_sends, blog_versions, blog_drafts, blog_posts,
         repo_kinds, social_links, core_members, study_groups, resources,
-        class_sessions, events, auth_invites, auth_password_resets,
-        auth_refresh_tokens, profiles
+        class_sessions, events, auth_email_verifications, auth_invites,
+        auth_password_resets, auth_refresh_tokens, profiles
       restart identity cascade
     `);
 
@@ -64,8 +65,8 @@ describe.skipIf(!hasTestDatabase)("API integration", () => {
         activity_log, analytics_events, analytics_pageviews, analytics_salts,
         subscriptions, email_sends, blog_versions, blog_drafts, blog_posts,
         repo_kinds, social_links, core_members, study_groups, resources,
-        class_sessions, events, auth_invites, auth_password_resets,
-        auth_refresh_tokens, profiles
+        class_sessions, events, auth_email_verifications, auth_invites,
+        auth_password_resets, auth_refresh_tokens, profiles
       restart identity cascade
     `);
     await rm("./test-media", { recursive: true, force: true });
@@ -424,6 +425,121 @@ describe.skipIf(!hasTestDatabase)("API integration", () => {
       .set("authorization", `Bearer ${adminToken}`);
 
     expect(removed.status).toBe(204);
+  });
+
+  it("signs up a member, requires verification and lists only opted-in profiles", async () => {
+    const signup = await request(app)
+      .post("/api/auth/signup")
+      .send({
+        email: "member@test.local",
+        password: "member-password-123",
+        displayName: "Test Member",
+        directoryOptIn: true,
+        emailUpdates: true,
+      });
+
+    expect(signup.status).toBe(201);
+    expect(signup.body.verifyUrl).toBeTruthy();
+
+    const verifyToken = new URL(signup.body.verifyUrl).hash.match(/verify=([^&]+)/)?.[1];
+    expect(verifyToken).toBeTruthy();
+
+    const blocked = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "member@test.local", password: "member-password-123" });
+
+    expect(blocked.status).toBe(403);
+
+    const verified = await request(app)
+      .post("/api/auth/verify-email")
+      .send({ token: decodeURIComponent(verifyToken!) });
+
+    expect(verified.status).toBe(200);
+    expect(verified.body.user.role).toBe("member");
+    expect(verified.body.user.email_verified_at).toBeTruthy();
+    memberToken = verified.body.accessToken;
+
+    const subscription = await pool.query(
+      `select confirmed_at from subscriptions
+        where email = 'member@test.local' and event_id is null`,
+    );
+    expect(subscription.rows[0]?.confirmed_at).toBeTruthy();
+
+    const directory = await request(app).get("/api/public/members");
+    expect(directory.status).toBe(200);
+    const listed = directory.body.find(
+      (row: { display_name: string }) => row.display_name === "Test Member",
+    );
+    expect(listed).toBeTruthy();
+    expect(listed).not.toHaveProperty("email");
+
+    const team = await request(app)
+      .get("/api/admin/team")
+      .set("authorization", `Bearer ${adminToken}`);
+
+    expect(team.status).toBe(200);
+    expect(team.body.some((row: { email: string }) => row.email === "member@test.local")).toBe(false);
+  });
+
+  it("edits a member profile and controls the all-events preference", async () => {
+    const updated = await request(app)
+      .patch("/api/account/profile")
+      .set("authorization", `Bearer ${memberToken}`)
+      .send({
+        display_name: "Test Member",
+        bio: "Learning in public.",
+        website_url: "https://example.com/member",
+        github_username: "@octocat",
+        avatar_url: "https://example.com/avatar.png",
+        directory_opted_in: false,
+      });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.github_username).toBe("octocat");
+    expect(updated.body.directory_opted_in).toBe(false);
+
+    const directory = await request(app).get("/api/public/members");
+    expect(
+      directory.body.some((row: { display_name: string }) => row.display_name === "Test Member"),
+    ).toBe(false);
+
+    const off = await request(app)
+      .patch("/api/account/email-preferences")
+      .set("authorization", `Bearer ${memberToken}`)
+      .send({ emailUpdates: false });
+
+    expect(off.status).toBe(200);
+    expect(
+      await pool.query(
+        "select 1 from subscriptions where email = 'member@test.local' and event_id is null",
+      ),
+    ).toMatchObject({ rowCount: 0 });
+
+    const on = await request(app)
+      .patch("/api/account/email-preferences")
+      .set("authorization", `Bearer ${memberToken}`)
+      .send({ emailUpdates: true });
+
+    expect(on.status).toBe(200);
+    const restored = await pool.query(
+      "select confirmed_at from subscriptions where email = 'member@test.local' and event_id is null",
+    );
+    expect(restored.rows[0]?.confirmed_at).toBeTruthy();
+  });
+
+  it("rejects unsafe member profile URLs and usernames", async () => {
+    for (const patch of [
+      { avatar_url: "http://example.com/avatar.png" },
+      { website_url: "javascript:alert(1)" },
+      { github_username: "bad user" },
+    ]) {
+      const response = await request(app)
+        .patch("/api/account/profile")
+        .set("authorization", `Bearer ${memberToken}`)
+        .send(patch);
+
+      expect(response.status).toBe(400);
+    }
   });
 
   it("prevents removing the last admin", async () => {

@@ -20,7 +20,7 @@ export const requireAuth = asyncHandler(
 
     const result = await pool.query<AuthUser>(
       `select id, email, display_name, role, can_view_analytics,
-              core_member_id, must_reset
+              core_member_id, must_reset, email_verified_at
          from profiles
         where id = $1`,
       [userId],
@@ -48,6 +48,18 @@ export function requireRole(...roles: Role[]) {
     }
     next();
   };
+}
+
+export function requireVerified(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) {
+    next(new HttpError(401, "Sign in first."));
+    return;
+  }
+  if (!req.user.email_verified_at) {
+    next(new HttpError(403, "Verify your email address first."));
+    return;
+  }
+  next();
 }
 
 export const requireEditor = [requireAuth, requireRole("admin", "editor")];

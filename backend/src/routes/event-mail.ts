@@ -200,6 +200,12 @@ async function confirm(token: string) {
   if (!row.confirmed_at) {
     await pool.query("update subscriptions set confirmed_at = now() where id = $1", [row.id]);
   }
+  if (row.event_id === null) {
+    await pool.query(
+      "update profiles set email_updates = true where lower(email) = lower($1)",
+      [row.email],
+    );
+  }
   return { email: mask(row.email), list: listName(eventOf(row)) };
 }
 
@@ -211,6 +217,13 @@ async function unsubscribe(token: string, everything: boolean) {
     await pool.query("delete from subscriptions where lower(email) = lower($1)", [row.email]);
   } else {
     await pool.query("delete from subscriptions where id = $1", [row.id]);
+  }
+
+  if (everything || row.event_id === null) {
+    await pool.query(
+      "update profiles set email_updates = false where lower(email) = lower($1)",
+      [row.email],
+    );
   }
 
   return {

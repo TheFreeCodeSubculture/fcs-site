@@ -14,8 +14,8 @@ src/app.ts                 Express app, CORS, security headers, error mapping
 src/server.ts              process entry point
 src/config.ts              environment validation
 src/db/                    pool, transactions, migration runner
-src/routes/                auth, public, admin, analytics, media, mail,
-                           integrations, tracking
+src/routes/                auth, account, public, admin, analytics, media,
+                           mail, integrations, tracking
 src/services/              auth tokens and email delivery
 src/integrations/medium/   the Medium importer
 migrations/                numbered, applied once and recorded
@@ -83,9 +83,12 @@ at production.
 ## Routes
 
 - `/health` — database health.
-- `/api/auth/*` — login, refresh, logout, me, password reset, invite accept.
+- `/api/auth/*` — member signup, email verification, login, refresh, logout,
+  me, password reset and invite accept.
+- `/api/account/*` — member profile editing and the all-events email
+  preference; requires a verified account.
 - `/api/public/*` — published events, classes, resources, groups, links,
-  members, repositories and blog posts.
+  opted-in member profiles, repositories and blog posts.
 - `/api/admin/*` — CRUD for every content table, team and role management,
   blog drafts and versions, activity history and restore, analytics,
   photo uploads and GitHub actions.
@@ -94,7 +97,33 @@ at production.
 - `/api/track` — first-party, cookie-free pageview and event collection.
 
 Admin routes require a JWT. Editors can create and update; only admins can
-delete or manage the team.
+delete or manage the team. Member accounts are separate: signup is open, but
+email verification is required before login, and the public directory only
+returns opted-in members without their email addresses.
+
+### Member frontend contract
+
+This repository deliberately does **not** include the member-facing UI. The
+backend routes are ready for the frontend developer:
+
+- signup, email verification, login, reset password and profile editing
+- the opt-in public directory at `/api/public/members`
+- the all-events email preference
+
+Verification emails currently link to:
+
+```text
+${PUBLIC_SITE_URL}/account.html#verify=<token>
+```
+
+Member password-reset emails currently link to:
+
+```text
+${PUBLIC_SITE_URL}/account.html#type=recovery&token=<token>
+```
+
+The frontend must provide that page, or the paths in
+`src/routes/auth.ts` must be changed to the route the frontend implements.
 
 ## Production and deploy
 

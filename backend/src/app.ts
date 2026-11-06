@@ -10,6 +10,7 @@ import { adminBlogRouter } from "./routes/admin-blog.js";
 import { adminGithubRouter } from "./routes/admin-github.js";
 import { adminMediaRouter } from "./routes/admin-media.js";
 import { adminTeamRouter } from "./routes/admin-team.js";
+import { accountRouter } from "./routes/account.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { adminMailRouter, eventMailRouter } from "./routes/event-mail.js";
@@ -58,6 +59,7 @@ export function createApp() {
 
   app.use("/api", trackRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/account", accountRouter);
   app.use("/api/event-mail", eventMailRouter);
   app.use("/api/integrations", integrationsRouter);
   app.use("/api/public", publicRouter);

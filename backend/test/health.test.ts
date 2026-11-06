@@ -9,7 +9,7 @@ describe("GET /", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       name: "fcs-backend",
-      status: "bootstrap",
+      status: "ok",
     });
   });
 });

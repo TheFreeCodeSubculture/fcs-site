@@ -37,6 +37,7 @@ adminTeamRouter.get(
       `select id, email, display_name, role, can_view_analytics,
               core_member_id, must_reset, created_at
          from profiles
+        where role <> 'member'
         order by created_at asc`,
     );
     res.json(result.rows);

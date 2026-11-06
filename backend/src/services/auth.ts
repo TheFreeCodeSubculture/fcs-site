@@ -14,6 +14,7 @@ export function publicUser(user: AuthUser) {
     can_view_analytics: user.can_view_analytics,
     core_member_id: user.core_member_id,
     must_reset: user.must_reset,
+    email_verified_at: user.email_verified_at,
   };
 }
 

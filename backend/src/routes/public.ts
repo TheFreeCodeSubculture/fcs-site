@@ -73,6 +73,23 @@ publicRouter.get(
 );
 
 publicRouter.get(
+  "/members",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `select id, display_name, bio, website_url, github_username, avatar_url,
+              created_at
+         from profiles
+        where role = 'member'
+          and email_verified_at is not null
+          and directory_opted_in
+        order by lower(coalesce(display_name, email)) asc, created_at asc
+        limit 200`,
+    );
+    res.json(result.rows);
+  }),
+);
+
+publicRouter.get(
   "/blog-posts",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
