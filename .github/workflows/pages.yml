@@ -59,11 +59,36 @@ jobs:
       - name: Blog pages and link-preview cards
         run: node tools/blog-build.mjs
 
+      # Publish the frontend only. backend/ contains server source and
+      # migrations, and must never be downloadable from GitHub Pages.
+      - name: Stage frontend
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude='.git' \
+            --exclude='backend' \
+            --exclude='tools' \
+            --exclude='docs' \
+            --exclude='node_modules' \
+            --exclude='_site' \
+            --exclude='.github' \
+            --exclude='.agents' \
+            --exclude='.codex' \
+            --exclude='.opencode' \
+            --exclude='.impeccable' \
+            --exclude='BACKEND-MIGRATION.md' \
+            --exclude='YOUR-ACTION-ITEMS.md' \
+            --exclude='README.md' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='skills-lock.json' \
+            ./ _site/
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - id: deployment
         uses: actions/deploy-pages@v4
