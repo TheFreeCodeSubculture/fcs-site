@@ -6,14 +6,14 @@
  * drawer to edit; the drawer shows a live preview built by the same
  * render functions as the public page (js/render.js).
  *
- * Every write goes through a named function in js/supabase.js, which
+ * Every write goes through a named function in js/api.js, which
  * treats an RLS refusal (zero rows changed) as an error.
  * ------------------------------------------------------------------
  */
 
 import {
   isConfigured,
-  getClientOrThrow,
+  readAdminTable,
   getSession,
   getRole,
   signIn,
@@ -33,7 +33,7 @@ import {
   listActivity, lastChange, listRowHistory, listBlogAuthors, linkMemberCard, restoreDeleted, inviteMember,
   getBlogDraft, saveBlogDraft, clearBlogDraft, addBlogVersion, listBlogVersions, postAnalytics, searchUnsplash, trackUnsplash,
   uploadMemberPhoto, removeMemberPhotos,
-} from "./supabase.js";
+} from "./api.js";
 import { nextOccurrence } from "./lib/schedule.js";
 import { deriveEventState } from "./lib/derive.js";
 import { toLocalInputValue, fromLocalInputValue, formatDateTimeLocal, slugify, duplicateSlug } from "./lib/forms.js";
@@ -156,9 +156,7 @@ function dismiss(item) {
 const quoted = (text) => `“${String(text || "untitled").slice(0, 60)}”`;
 
 async function readTable(name, order = "sort_order", newestFirst = false) {
-  const { data, error } = await getClientOrThrow().from(name).select("*").order(order, { ascending: !newestFirst });
-  if (error) throw error;
-  return data || [];
+  return readAdminTable(name, order, newestFirst);
 }
 
 const isAdmin = () => state.role === "admin";
@@ -198,7 +196,7 @@ function armedDelete(button, run) {
 document.addEventListener("DOMContentLoaded", boot);
 
 /* A password-reset link lands here with the recovery token in the URL
- * hash. supabase-js reads it and signs the user in; we show the
+ * hash. the API adapter completes the reset; we show the
  * choose-a-new-password card instead of the panel. Read the flag before
  * anything touches the hash. */
 const RECOVERY = /type=(recovery|invite)/.test(location.hash);
@@ -243,8 +241,8 @@ async function boot() {
   if (!isConfigured()) {
     gate(`
       <h1>Admin panel</h1>
-      <p class="gate-sub">Supabase is not configured yet. Set <code>supabaseUrl</code> and
-         <code>supabaseAnonKey</code> in <code>js/config.js</code>, then reload.</p>`);
+      <p class="gate-sub">The backend is not configured yet. Set <code>apiBaseUrl</code>
+         in <code>js/config.js</code>, then reload.</p>`);
     return;
   }
 
@@ -259,7 +257,7 @@ async function boot() {
     return;
   }
 
-  if (session && RECOVERY) return renderSetPassword(session.user);
+  if (RECOVERY) return renderSetPassword(session?.user || null);
   if (!session) {
     let reason = null;
     try {
@@ -396,18 +394,19 @@ function renderLogin(notice, { email: prefillEmail = "" } = {}) {
 }
 
 async function renderSetPassword(user) {
-  const role = INVITE ? await getRole(user.id).catch(() => null) : null;
+  const role = INVITE && user ? await getRole(user.id).catch(() => null) : null;
   const roleName = { admin: "Admin", editor: "Editor" }[role];
+  const email = user?.email || "";
   const heading = INVITE ? "Accept your invite" : "Choose a new password";
   const sub = INVITE
     ? `You have been invited to The Free Code Subculture's panel${roleName ? ` as <strong>${roleName}</strong>` : ""}.
-       Choose a password for <strong>${escapeHTML(user.email)}</strong> to accept.`
-    : `For <strong>${escapeHTML(user.email)}</strong>. At least 8 characters.`;
+       Choose a password${email ? ` for <strong>${escapeHTML(email)}</strong>` : ""} to accept.`
+    : `Choose a new password${email ? ` for <strong>${escapeHTML(email)}</strong>` : ""}. At least 8 characters.`;
 
   const card = gate(`
     <h1>${heading}</h1>
     <p class="gate-sub">${sub}</p>
-    <input type="email" autocomplete="username" value="${escapeAttr(user.email)}" hidden aria-hidden="true" tabindex="-1" />
+    ${email ? `<input type="email" autocomplete="username" value="${escapeAttr(email)}" hidden aria-hidden="true" tabindex="-1" />` : ""}
     ${gateField({ id: "new-password", label: "Password", type: "password", icon: "lock", autocomplete: "new-password", reveal: true })}
     ${gateField({ id: "confirm-password", label: "Confirm password", type: "password", icon: "lock", autocomplete: "new-password" })}
     <p class="admin-error" id="login-error" role="alert"></p>
@@ -443,7 +442,7 @@ async function renderSetPassword(user) {
             : "Password changed. Sign in with your new password.",
           tone: "ok",
         },
-        { email: user.email }
+        { email }
       );
     } catch (err) {
       errorEl.textContent = err.message || "Could not set the password.";
@@ -1090,7 +1089,7 @@ async function openPostEditor(row, { replace = false, initial = null } = {}) {
     },
     history: (id) => listRowHistory("blog_posts", id, 100),
     analytics: (slug, days) => postAnalytics(slug, days),
-    // The cover picker's Unsplash tab (supabase/functions/unsplash).
+    // The cover picker's Unsplash tab (backend integration route).
     unsplash: { search: searchUnsplash, track: trackUnsplash },
     // "@" mentions: core members, linked to GitHub or their site.
     people: state.data.core_members
@@ -1962,7 +1961,7 @@ function renderTeamPage(page) {
       </div>
       <button type="submit" class="btn btn-primary">${icon("send")}<span>Send invite</span></button>
       <p class="field-help invite-help">They get an email with a link to choose a password; their role is already set.
-        Emails to addresses outside your Supabase team need custom SMTP (see the README).</p>
+        Invites are sent through the backend's Gmail SMTP settings (see backend/README.md).</p>
     </form>
     ${pending ? `<p class="page-alert">${icon("user")} ${pending} ${pending === 1 ? "account is" : "accounts are"} waiting for approval.</p>` : ""}
     <ol class="list team-list">
@@ -2410,18 +2409,10 @@ function chartCard({ title, description = "", body, footer = "", wide = false, a
 }
 
 let analyticsRequestId = 0;
-let analyticsChannel = null;
 let analyticsTimer = null;
 let analyticsDebounceTimer = null;
 
 function stopAnalyticsRealtime() {
-  if (analyticsChannel) {
-    try {
-      const client = getClientOrThrow();
-      client.removeChannel(analyticsChannel);
-    } catch (e) {}
-    analyticsChannel = null;
-  }
   if (analyticsTimer) {
     clearInterval(analyticsTimer);
     analyticsTimer = null;
@@ -2434,20 +2425,8 @@ function stopAnalyticsRealtime() {
 
 function startAnalyticsRealtime(page) {
   stopAnalyticsRealtime();
-  try {
-    const client = getClientOrThrow();
-    analyticsChannel = client
-      .channel("public:analytics-live")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "analytics_pageviews" }, () => {
-        queueAnalyticsRefresh(page);
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "analytics_events" }, () => {
-        queueAnalyticsRefresh(page);
-      })
-      .subscribe();
-  } catch (err) {}
 
-  // Periodic fallback refresh (every 10s if visible)
+  // The API has no Realtime channel; refresh every 10 seconds while visible.
   analyticsTimer = setInterval(() => {
     if (state.route === "analytics" && !document.hidden) {
       queueAnalyticsRefresh(page, { silent: true });

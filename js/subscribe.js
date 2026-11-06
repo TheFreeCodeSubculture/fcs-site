@@ -8,7 +8,7 @@
  *                                       cannot unsubscribe anyone
  * ------------------------------------------------------------------
  */
-import { eventMail } from "./supabase.js";
+import { eventMail } from "./api.js";
 import { escapeHTML } from "./render.js";
 
 const params = new URLSearchParams(location.search);

@@ -17,7 +17,7 @@ export const SITE = "https://thefreecodesubculture.github.io/fcs-site/";
 // Images from any https site (posts may link one; images cannot run
 // code); KaTeX fonts from our own site; YouTube only through its
 // no-cookie player. Scripts only from this site.
-const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'";
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://fcs-api.akos-archives.in; object-src 'none'; base-uri 'self'; form-action 'self'";
 
 const dateText = (iso) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const describe = (post) => post.excerpt || plainSummary(post.body);

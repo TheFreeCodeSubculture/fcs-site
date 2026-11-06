@@ -2,7 +2,7 @@
   "name": "fcs-site",
   "version": "1.0.0",
   "private": true,
-  "description": "The Free Code Subculture — static site with a Supabase-backed admin panel.",
+  "description": "The Free Code Subculture — static site with a self-hosted Node/Postgres admin backend.",
   "type": "module",
   "scripts": {
     "test": "node --test js/lib/*.test.js",

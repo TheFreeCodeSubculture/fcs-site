@@ -12,7 +12,7 @@
  * ------------------------------------------------------------------
  */
 
-import { mediumFeed, mediumStory, mediumImport } from "./supabase.js";
+import { mediumFeed, mediumStory, mediumImport } from "./api.js";
 import { renderMarkdown } from "./lib/markdown.js";
 import {
   clipTitle,

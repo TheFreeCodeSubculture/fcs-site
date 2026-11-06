@@ -6,8 +6,8 @@
  * script, and its top-level `const`s live in the global lexical
  * environment, which a module cannot see.
  *
- * Content comes from the database via js/supabase.js, falling back to
- * the SEED_* arrays when Supabase is unconfigured or unreachable. The
+ * Content comes from the database via js/api.js, falling back to the
+ * SEED_* arrays when the backend is unconfigured or unreachable. The
  * repository list comes from the public GitHub API. No build step, no
  * framework — this file runs as-is in the browser.
  *
@@ -41,7 +41,7 @@ watchFavicons();
 import {
   getEvents, getClassSessions, getResources,
   getStudyGroups, getSocialLinks, getRepoKinds, getCoreMembers, eventMail,
-} from "./supabase.js";
+} from "./api.js";
 
 let allEvents = [];
 let allClassSessions = [];
@@ -65,9 +65,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupCopyButtons();
   setupGlassNav();
 
-  // The fetches are deliberately independent: a Supabase outage
-  // or a GitHub rate limit degrades one section without touching the
-  // others.
+  // The fetches are deliberately independent: a backend outage or a
+  // GitHub rate limit degrades one section without touching the others.
   loadContent();
   loadRepositories();
   loadLatestPosts();
@@ -125,9 +124,9 @@ function renderContributionLanes() {
 }
 
 /* ------------------------------------------------------------------
- * Content — one Supabase read per public table, each with a seed
- * fallback. A failure anywhere resolves to the seed array rather than
- * rejecting, so Promise.all cannot blank the page.
+ * Content — one API read per public table, each with a seed fallback.
+ * A failure anywhere resolves to the seed array rather than rejecting,
+ * so Promise.all cannot blank the page.
  * ---------------------------------------------------------------- */
 async function loadContent() {
   const [events, classSessions, resources, studyGroups, socialLinks, coreMembers] = await Promise.all([
@@ -1191,7 +1190,7 @@ async function setMetaDiscord(links) {
  *
  * On a load or reload with a hash, the browser jumps to the target
  * immediately. Projects, events, groups and members then arrive from
- * GitHub and Supabase and render ABOVE the target, pushing it down, so
+ * GitHub and the API and render ABOVE the target, pushing it down, so
  * the reader ends up a section or more too high. Instead of guessing
  * heights, this watches the page and re-aligns the actual element
  * whenever the layout changes, for any id (sections without a nav link,

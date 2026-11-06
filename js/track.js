@@ -2,7 +2,7 @@
  * js/track.js
  * ------------------------------------------------------------------
  * First-party, cookie-free analytics for the public pages. Sends small
- * beacons to the `collect` Edge Function (supabase/functions/collect):
+ * beacons to the FCS backend (`POST /api/track`):
  *
  *   view    once per page load: path, referring site, utm tags, device
  *           size, timezone (a rough region), and whether this browser
@@ -35,10 +35,10 @@
     el.style.background = ok ? "#7be07b" : "#ff8c8c";
     el.textContent = `Analytics: ${text}`;
   };
-  if (!config.supabaseUrl) return note("not configured", false);
+  if (!config.apiBaseUrl) return note("not configured", false);
   if (/^(localhost|127\.)/.test(location.hostname) && !/[?&]track=1\b/.test(location.search)) return note("not counted on localhost", false);
 
-  const endpoint = `${config.supabaseUrl}/functions/v1/collect`;
+  const endpoint = `${config.apiBaseUrl}/api/track`;
   const store = (area, key, make) => {
     try {
       let value = window[area].getItem(key);
