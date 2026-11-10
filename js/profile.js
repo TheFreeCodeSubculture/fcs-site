@@ -3,7 +3,10 @@
  * ------------------------------------------------------------------
  * The member profile page. Reads the signed-in member from the API,
  * lets them update their details and avatar, and signs them out.
- * No public directory, badges or leaderboards here.
+ *
+ * The page is built around a hanging member pass. The pass is ordinary
+ * DOM: the lanyard module only moves it. No public directory or
+ * leaderboards here.
  * ------------------------------------------------------------------
  */
 
@@ -17,6 +20,8 @@ import {
   uploadMyAvatar,
 } from "./api.js";
 import { avatarHTML } from "./lib/avatar.js";
+import { mountLanyard } from "./lib/lanyard.js";
+import { barcodeSVG, passSerial, shortHost } from "./lib/member-pass.js";
 import { startPixelField } from "./lib/pixel-field.js";
 import { escapeAttr, escapeHTML } from "./render.js";
 
@@ -28,6 +33,8 @@ let profile = null;
 let pageNotice = "";
 let pageTone = "ok";
 let noticeTimer = null;
+let lanyard = null;
+let passFlipped = false;
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -67,6 +74,8 @@ async function init() {
 }
 
 function renderSignedOut(message = "") {
+  lanyard?.destroy();
+  lanyard = null;
   root.innerHTML = `
     <section class="profile-gate">
       <p class="auth-kicker">// PROFILE</p>
@@ -78,97 +87,347 @@ function renderSignedOut(message = "") {
 }
 
 function renderProfile() {
-  const name = profile.display_name || profile.email || "Member";
+  const name = currentName();
   const role = roleLabel(profile.role);
-  const joined = formatJoined(profile.created_at);
-  const website = safeLink(profile.website_url);
-  const github = profile.github_username
-    ? `https://github.com/${encodeURIComponent(profile.github_username)}`
-    : "";
+  const avatar = profile.avatar_url || "";
+  const serial = passSerial(profile.id, profile.created_at);
   const adminLink = profile.role === "admin" || profile.role === "editor"
     ? `<a class="btn-subscribe" href="admin.html"><span>Admin panel</span></a>`
     : "";
 
+  lanyard?.destroy();
+  lanyard = null;
+  passFlipped = false;
+
   root.innerHTML = `
-    ${pageNotice ? `<p class="profile-page-status" data-tone="${pageTone}" role="status">${escapeHTML(pageNotice)}</p>` : ""}
-    <section class="profile-card profile-identity">
-      <div class="profile-avatar-slot" id="profile-avatar-slot">
-        ${avatarHTML({ name, avatar: profile.avatar_url || "" }, "avatar profile-avatar")}
+    <p class="profile-page-status" id="profile-page-status" role="status" hidden></p>
+
+    <section class="pass-stage" id="pass-stage" aria-label="Your member pass">
+      <div class="pass-rail" aria-hidden="true">
+        <span>Member issue</span>
+        <span class="pass-rail-line"></span>
+        <span>FCS / Pass</span>
       </div>
-      <h1>${escapeHTML(name)}</h1>
-      <p class="auth-email">${escapeHTML(profile.email || "")}</p>
-      <span class="auth-role">${escapeHTML(role)}</span>
+      <span class="pass-anchor" aria-hidden="true"></span>
+      <span class="pass-cast-shadow" aria-hidden="true"></span>
 
-      <dl class="auth-facts">
-        <div><dt>Member since</dt><dd>${escapeHTML(joined)}</dd></div>
-        ${website ? `<div><dt>Website</dt><dd><a href="${escapeAttr(website)}" target="_blank" rel="noopener">${escapeHTML(website.replace(/^https?:\/\//i, ""))}</a></dd></div>` : ""}
-        ${github ? `<div><dt>GitHub</dt><dd><a href="${escapeAttr(github)}" target="_blank" rel="noopener">${escapeHTML(profile.github_username)}</a></dd></div>` : ""}
-      </dl>
+      <svg class="pass-strap" aria-hidden="true" focusable="false">
+        <path class="pass-strap-edge" id="pass-strap-path"></path>
+        <path class="pass-strap-face"></path>
+        <path class="pass-strap-stitch"></path>
+        <text class="pass-strap-copy">
+          <textPath href="#pass-strap-path" startOffset="2">FREE CODE SUBCULTURE · FCS · </textPath>
+        </text>
+      </svg>
 
-      <div class="profile-preference">
-        <div>
-          <strong>Event emails</strong>
-          <span>Updates about events and the club.</span>
+      <article class="member-pass" id="member-pass" tabindex="0"
+        aria-label="Member pass for ${escapeAttr(name)}" aria-describedby="pass-hint">
+        <span class="pass-clip" aria-hidden="true"></span>
+        <span class="pass-grip" aria-hidden="true"></span>
+
+        <div class="pass-flipper" id="pass-flipper">
+          <section class="pass-face pass-face--front" id="pass-front" aria-label="Front of member pass">
+            <header class="pass-head">
+              <img src="assets/logoicon.svg" alt="" width="24" height="22" />
+              <span class="pass-brand">The Free Code Subculture</span>
+              <span class="pass-kind">Member<br />Pass</span>
+            </header>
+
+            <div class="pass-identity">
+              <div class="pass-portrait" id="pass-avatar-slot">
+                ${avatarHTML({ name, avatar }, "avatar pass-avatar")}
+              </div>
+              <h1 class="pass-name" id="pass-name">${escapeHTML(name)}</h1>
+              <span class="pass-role" id="pass-role">${escapeHTML(role)}</span>
+            </div>
+
+            <dl class="pass-facts" id="pass-facts">
+              ${passFactsHTML()}
+            </dl>
+
+            <p class="pass-front-bio" id="pass-front-bio">${escapeHTML(passBioText())}</p>
+
+            <div class="pass-front-actions">
+              <button type="button" class="pass-flip" data-flip="back"
+                aria-controls="pass-back" aria-label="Show links and details">
+                Links &amp; details <span aria-hidden="true">→</span>
+              </button>
+            </div>
+
+            <footer class="pass-foot">
+              <span class="pass-serial">${escapeHTML(serial)}</span>
+              <span class="pass-barcode" aria-hidden="true">${barcodeSVG(serial)}</span>
+            </footer>
+            <span class="pass-watermark" aria-hidden="true">FCS</span>
+            <span class="pass-slot" aria-hidden="true"></span>
+            <span class="pass-sheen" aria-hidden="true"></span>
+          </section>
+
+          <section class="pass-face pass-face--back" id="pass-back" aria-label="Back of member pass">
+            <header class="pass-head">
+              <img src="assets/logoicon.svg" alt="" width="24" height="22" />
+              <span class="pass-brand">The Free Code Subculture</span>
+              <span class="pass-kind">Profile<br />Reverse</span>
+            </header>
+
+            <div class="pass-back-identity">
+              <p class="pass-back-kicker">Member profile</p>
+              <h2 class="pass-back-name" id="pass-back-name">${escapeHTML(name)}</h2>
+              <span class="pass-role" id="pass-back-role">${escapeHTML(role)}</span>
+            </div>
+
+            <p class="pass-back-bio" id="pass-back-bio">${escapeHTML(passBioText())}</p>
+
+            <div class="pass-links" id="pass-links">
+              ${passLinksHTML()}
+            </div>
+
+            <footer class="pass-back-foot">
+              <span class="pass-serial">${escapeHTML(serial)}</span>
+              <button type="button" class="pass-flip pass-flip--back" data-flip="front"
+                aria-controls="pass-front" aria-label="Show the front of the pass">
+                <span aria-hidden="true">←</span> Front
+              </button>
+            </footer>
+            <span class="pass-watermark" aria-hidden="true">FCS</span>
+            <span class="pass-slot" aria-hidden="true"></span>
+            <span class="pass-sheen" aria-hidden="true"></span>
+          </section>
         </div>
-        <button type="button" class="profile-switch${profile.email_updates ? " is-on" : ""}"
-          id="email-updates" role="switch" aria-checked="${profile.email_updates}">
-          ${profile.email_updates ? "On" : "Off"}
-        </button>
-      </div>
+      </article>
 
-      <div class="profile-avatar-actions">
-        <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
-        <button type="button" class="btn-subscribe" id="avatar-change"><span>Change photo</span></button>
-        ${profile.avatar_url ? `<button type="button" class="link-button" id="avatar-remove">Remove photo</button>` : ""}
-      </div>
-      <p class="auth-status" id="avatar-status" role="status"></p>
-      <p class="auth-foot">JPG, PNG or WebP, up to 10 MB. Photos are cropped and resized to 512 px before upload.</p>
-
-      <div class="profile-session-actions">
-        ${adminLink}
-        <button type="button" class="link-button" id="profile-signout">Sign out</button>
-      </div>
+      <p class="pass-hint" id="pass-hint">
+        <span class="pass-hint-fine">Drag to swing. Click to flip. Arrow keys work too.</span>
+        <span class="pass-hint-coarse">Drag from the clip. Tap to flip.</span>
+      </p>
     </section>
 
-    <section class="profile-card profile-edit">
-      <div class="profile-card-heading">
-        <p class="auth-kicker">// EDIT</p>
-        <h2>Profile details</h2>
+    <section class="profile-record" aria-labelledby="profile-record-title">
+      <div class="profile-record-head">
+        <p class="auth-kicker">// PROFILE RECORD</p>
+        <h2 id="profile-record-title">Profile details</h2>
+        <p class="profile-record-sub">
+          Signed in as <span id="record-email">${escapeHTML(profile.email || "")}</span>.
+          Changes appear on your pass.
+        </p>
       </div>
-      <form class="profile-form" id="profile-form" novalidate>
-        <label class="auth-field">
-          <span>Display name</span>
-          <input name="display_name" type="text" autocomplete="name" maxlength="80"
-            value="${escapeAttr(profile.display_name || "")}" required />
-        </label>
-        <label class="auth-field">
-          <span>Website</span>
-          <input name="website_url" type="url" autocomplete="url" maxlength="500"
-            placeholder="https://example.com" value="${escapeAttr(profile.website_url || "")}" />
-        </label>
-        <label class="auth-field">
-          <span>GitHub username</span>
-          <input name="github_username" type="text" autocomplete="off" maxlength="40"
-            placeholder="octocat" value="${escapeAttr(profile.github_username || "")}" />
-        </label>
-        <label class="auth-field profile-field-wide">
-          <span>Bio</span>
-          <textarea name="bio" maxlength="1200" rows="5" placeholder="What are you learning or building?">${escapeHTML(profile.bio || "")}</textarea>
-        </label>
-        <p class="auth-error" role="alert"></p>
-        <p class="auth-status" role="status"></p>
-        <div class="profile-form-actions">
-          <button type="submit" class="auth-submit btn-subscribe"><span>Save profile</span></button>
-          <a class="link-button" href="./">Back to the RFC</a>
-        </div>
-      </form>
+
+      <div class="profile-record-grid">
+        <form class="profile-form" id="profile-form" novalidate>
+          <label class="auth-field">
+            <span>Display name</span>
+            <input name="display_name" type="text" autocomplete="name" maxlength="80"
+              value="${escapeAttr(profile.display_name || "")}" required />
+          </label>
+          <label class="auth-field">
+            <span>Website</span>
+            <input name="website_url" type="url" autocomplete="url" maxlength="500"
+              placeholder="https://example.com" value="${escapeAttr(profile.website_url || "")}" />
+          </label>
+          <label class="auth-field">
+            <span>GitHub username</span>
+            <input name="github_username" type="text" autocomplete="off" maxlength="40"
+              placeholder="octocat" value="${escapeAttr(profile.github_username || "")}" />
+          </label>
+          <label class="auth-field profile-field-wide">
+            <span>Bio</span>
+            <textarea name="bio" maxlength="1200" rows="5" placeholder="What are you learning or building?">${escapeHTML(profile.bio || "")}</textarea>
+          </label>
+          <p class="auth-error" role="alert"></p>
+          <p class="auth-status" role="status"></p>
+          <div class="profile-form-actions">
+            <button type="submit" class="auth-submit btn-subscribe"><span>Save profile</span></button>
+            <a class="link-button" href="./">Back to the RFC</a>
+          </div>
+        </form>
+
+        <aside class="profile-aside">
+          <section class="record-block" aria-labelledby="record-photo-title">
+            <h3 id="record-photo-title">Photo</h3>
+            <div class="record-photo-row">
+              <div id="record-avatar-slot">
+                ${avatarHTML({ name, avatar }, "avatar record-avatar")}
+              </div>
+              <div class="profile-avatar-actions">
+                <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                <button type="button" class="btn-subscribe" id="avatar-change"><span>Change photo</span></button>
+                <button type="button" class="link-button" id="avatar-remove"${profile.avatar_url ? "" : " hidden"}>Remove photo</button>
+              </div>
+            </div>
+            <p class="auth-status" id="avatar-status" role="status"></p>
+            <p class="record-help">JPG, PNG or WebP, up to 10 MB. Photos are cropped and resized to 512 px before upload.</p>
+          </section>
+
+          <section class="record-block" aria-labelledby="record-email-title">
+            <h3 id="record-email-title">Email</h3>
+            <div class="profile-preference">
+              <div>
+                <strong>Event emails</strong>
+                <span>Updates about events and the club.</span>
+              </div>
+              <button type="button" class="profile-switch${profile.email_updates ? " is-on" : ""}"
+                id="email-updates" role="switch" aria-checked="${profile.email_updates}">
+                ${profile.email_updates ? "On" : "Off"}
+              </button>
+            </div>
+            <p class="auth-status" id="preference-status" role="status"></p>
+          </section>
+
+          <section class="record-block" aria-labelledby="record-account-title">
+            <h3 id="record-account-title">Account</h3>
+            <div class="profile-session-actions">
+              ${adminLink}
+              <button type="button" class="link-button" id="profile-signout">Sign out</button>
+            </div>
+          </section>
+        </aside>
+      </div>
     </section>`;
 
   bindAvatar();
   bindForm();
   bindPreferences();
   bindSignOut();
-  armNoticeTimer();
+  bindPass();
+
+  lanyard = mountLanyard(root.querySelector("#pass-stage"));
+
+  if (pageNotice) setPageNotice(pageNotice, pageTone);
+  else armNoticeTimer();
+}
+
+function currentName() {
+  return profile?.display_name || profile?.email || "Member";
+}
+
+function passBioText() {
+  return (profile?.bio || "").trim() || "Member of the Free Code Subculture.";
+}
+
+function passFactsHTML() {
+  const rows = [
+    `<div><dt>Member since</dt><dd>${escapeHTML(formatJoined(profile.created_at))}</dd></div>`,
+  ];
+  const website = safeLink(profile.website_url);
+  const host = shortHost(website);
+  if (host) {
+    rows.push(
+      `<div><dt>Web</dt><dd><a href="${escapeAttr(website)}" target="_blank" rel="noopener">${escapeHTML(host)}</a></dd></div>`,
+    );
+  }
+  if (profile.github_username) {
+    const github = `https://github.com/${encodeURIComponent(profile.github_username)}`;
+    rows.push(
+      `<div><dt>GitHub</dt><dd><a href="${escapeAttr(github)}" target="_blank" rel="noopener">@${escapeHTML(profile.github_username)}</a></dd></div>`,
+    );
+  }
+  return rows.join("");
+}
+
+function passLinksHTML() {
+  const links = [];
+  const website = safeLink(profile.website_url);
+  const host = shortHost(website);
+  if (host) {
+    links.push(passLinkHTML("Website", host, website, "↗"));
+  }
+  if (profile.github_username) {
+    links.push(
+      passLinkHTML(
+        "GitHub",
+        `@${profile.github_username}`,
+        `https://github.com/${encodeURIComponent(profile.github_username)}`,
+        "↗",
+      ),
+    );
+  }
+  if (profile.email) {
+    links.push(passLinkHTML("Email", profile.email, `mailto:${profile.email}`, "✉"));
+  }
+  return links.length
+    ? links.join("")
+    : `<p class="pass-links-empty">Add a website or GitHub in your profile to put links on your pass.</p>`;
+}
+
+function passLinkHTML(label, value, href, glyph) {
+  const external = /^https?:/i.test(href);
+  return `<a class="pass-link" href="${escapeAttr(href)}"${external ? ' target="_blank" rel="noopener"' : ""}>
+    <span class="pass-link-text">
+      <span class="pass-link-label">${escapeHTML(label)}</span>
+      <span class="pass-link-value">${escapeHTML(value)}</span>
+    </span>
+    <span class="pass-link-arrow" aria-hidden="true">${glyph}</span>
+  </a>`;
+}
+
+function renderAvatars(name = currentName(), avatar = profile?.avatar_url || "") {
+  const passSlot = root.querySelector("#pass-avatar-slot");
+  const recordSlot = root.querySelector("#record-avatar-slot");
+  if (passSlot) {
+    passSlot.innerHTML = avatarHTML({ name, avatar }, "avatar pass-avatar");
+  }
+  if (recordSlot) {
+    recordSlot.innerHTML = avatarHTML({ name, avatar }, "avatar record-avatar");
+  }
+}
+
+function syncPass() {
+  if (!profile) return;
+  const name = currentName();
+  const passName = root.querySelector("#pass-name");
+  if (!passName) return;
+
+  passName.textContent = name;
+  root.querySelector("#pass-role").textContent = roleLabel(profile.role);
+  root.querySelector("#pass-facts").innerHTML = passFactsHTML();
+  const frontBio = root.querySelector("#pass-front-bio");
+  if (frontBio) frontBio.textContent = passBioText();
+  const backName = root.querySelector("#pass-back-name");
+  if (backName) backName.textContent = name;
+  const backRole = root.querySelector("#pass-back-role");
+  if (backRole) backRole.textContent = roleLabel(profile.role);
+  const backBio = root.querySelector("#pass-back-bio");
+  if (backBio) backBio.textContent = passBioText();
+  const links = root.querySelector("#pass-links");
+  if (links) links.innerHTML = passLinksHTML();
+  const card = root.querySelector("#member-pass");
+  if (card) card.setAttribute("aria-label", `Member pass for ${name}`);
+
+  const recordEmail = root.querySelector("#record-email");
+  if (recordEmail) recordEmail.textContent = profile.email || "";
+  const remove = root.querySelector("#avatar-remove");
+  if (remove) remove.hidden = !profile.avatar_url;
+  renderAvatars(name, profile.avatar_url || "");
+  document.title = `${profile.display_name || profile.email} | The Free Code Subculture`;
+}
+
+function previewName(name) {
+  const passName = root.querySelector("#pass-name");
+  if (passName) passName.textContent = name;
+  const backName = root.querySelector("#pass-back-name");
+  if (backName) backName.textContent = name;
+  const card = root.querySelector("#member-pass");
+  if (card) card.setAttribute("aria-label", `Member pass for ${name}`);
+  if (!profile?.avatar_url) renderAvatars(name, "");
+}
+
+function syncFormValues() {
+  const form = root.querySelector("#profile-form");
+  if (!form) return;
+  form.querySelector('input[name="display_name"]').value = profile.display_name || "";
+  form.querySelector('input[name="website_url"]').value = profile.website_url || "";
+  form.querySelector('input[name="github_username"]').value = profile.github_username || "";
+  form.querySelector('textarea[name="bio"]').value = profile.bio || "";
+}
+
+function syncPreferences() {
+  const button = root.querySelector("#email-updates");
+  if (!button) return;
+  const on = Boolean(profile.email_updates);
+  button.classList.toggle("is-on", on);
+  button.setAttribute("aria-checked", String(on));
+  button.textContent = on ? "On" : "Off";
+  button.disabled = false;
 }
 
 function bindAvatar() {
@@ -176,6 +435,7 @@ function bindAvatar() {
   const change = root.querySelector("#avatar-change");
   const remove = root.querySelector("#avatar-remove");
   const status = root.querySelector("#avatar-status");
+  if (!input || !change) return;
 
   change.addEventListener("click", () => input.click());
 
@@ -183,6 +443,7 @@ function bindAvatar() {
     const file = input.files?.[0];
     if (!file) return;
     clearPageNotice();
+    setStatus(status, "");
 
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setStatus(status, "Use a JPG, PNG or WebP image.", "error");
@@ -196,9 +457,7 @@ function bindAvatar() {
     }
 
     const preview = URL.createObjectURL(file);
-    const slot = root.querySelector("#profile-avatar-slot");
-    const previous = slot.innerHTML;
-    slot.innerHTML = `<img class="avatar profile-avatar" src="${preview}" alt="" />`;
+    renderAvatars(currentName(), preview);
 
     try {
       setStatus(status, "Preparing photo…");
@@ -212,12 +471,12 @@ function bindAvatar() {
 
       const updated = await withBusy(change, "Uploading…", () => uploadMyAvatar(upload));
       profile = updated;
-      setPageNotice("Profile photo updated.");
+      syncPass();
+      setStatus(status, "Photo updated.");
       URL.revokeObjectURL(preview);
-      renderProfile();
     } catch (error) {
       URL.revokeObjectURL(preview);
-      slot.innerHTML = previous;
+      renderAvatars();
       setStatus(
         status,
         error.status === 404
@@ -232,11 +491,12 @@ function bindAvatar() {
 
   remove?.addEventListener("click", async () => {
     clearPageNotice();
+    setStatus(status, "");
     try {
       const updated = await withBusy(remove, "Removing…", () => removeMyAvatar());
       profile = updated;
-      setPageNotice("Profile photo removed.");
-      renderProfile();
+      syncPass();
+      setStatus(status, "Photo removed.");
     } catch (error) {
       setStatus(
         status,
@@ -321,10 +581,20 @@ function canvasBlob(canvas, type, quality) {
 
 function bindForm() {
   const form = root.querySelector("#profile-form");
+  if (!form) return;
   const errorEl = form.querySelector(".auth-error");
   const status = form.querySelector(".auth-status");
+  const nameInput = form.querySelector('input[name="display_name"]');
 
-  form.addEventListener("input", clearPageNotice);
+  form.addEventListener("input", () => {
+    clearPageNotice();
+    status.textContent = "";
+  });
+
+  nameInput.addEventListener("input", () => {
+    const preview = nameInput.value.trim() || profile.display_name || profile.email || "Member";
+    previewName(preview);
+  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -332,7 +602,7 @@ function bindForm() {
     status.textContent = "";
     clearPageNotice();
 
-    const displayName = form.querySelector('input[name="display_name"]').value.trim();
+    const displayName = nameInput.value.trim();
     const website = form.querySelector('input[name="website_url"]').value.trim();
     const github = form.querySelector('input[name="github_username"]').value.trim().replace(/^@/, "");
     const bio = form.querySelector('textarea[name="bio"]').value.trim();
@@ -366,9 +636,9 @@ function bindForm() {
         }),
       );
       profile = updated;
-      setPageNotice("Profile saved.");
-      document.title = `${profile.display_name || profile.email} | The Free Code Subculture`;
-      renderProfile();
+      setStatus(status, "Profile saved.");
+      syncPass();
+      syncFormValues();
     } catch (error) {
       errorEl.textContent = error.message || "Could not save your profile.";
     }
@@ -378,40 +648,115 @@ function bindForm() {
 function bindPreferences() {
   const button = root.querySelector("#email-updates");
   if (!button) return;
+  const status = root.querySelector("#preference-status");
 
   button.addEventListener("click", async () => {
     clearPageNotice();
+    setStatus(status, "");
     button.disabled = true;
     try {
       const result = await updateEmailPreferences(!profile.email_updates);
       profile.email_updates = result.emailUpdates;
-      setPageNotice(
+      syncPreferences();
+      setStatus(
+        status,
         result.emailUpdates
           ? "Event emails turned on."
           : "Event emails turned off.",
       );
-      renderProfile();
     } catch (error) {
-      button.disabled = false;
-      setPageNotice(
+      syncPreferences();
+      setStatus(
+        status,
         error.message || "Could not update email preferences.",
         "error",
       );
-      renderProfile();
     }
   });
 }
 
 function bindSignOut() {
-  root.querySelector("#profile-signout").addEventListener("click", async (event) => {
+  root.querySelector("#profile-signout")?.addEventListener("click", async (event) => {
     await withBusy(event.currentTarget, "Signing out…", () => signOut());
     location.href = "./";
+  });
+}
+
+function bindPass() {
+  const card = root.querySelector("#member-pass");
+  const flipper = root.querySelector("#pass-flipper");
+  const front = root.querySelector("#pass-front");
+  const back = root.querySelector("#pass-back");
+  if (!card || !flipper || !front || !back) return;
+
+  let flipTimer = 0;
+
+  const markFlipping = () => {
+    flipper.style.willChange = "transform";
+    if (flipTimer) clearTimeout(flipTimer);
+    flipTimer = setTimeout(() => {
+      flipper.style.willChange = "auto";
+      flipTimer = 0;
+    }, 550);
+  };
+
+  const setFlipped = (value) => {
+    const next = Boolean(value);
+    const changed = next !== passFlipped;
+    passFlipped = next;
+    card.classList.toggle("is-flipped", passFlipped);
+    front.toggleAttribute("inert", passFlipped);
+    back.toggleAttribute("inert", !passFlipped);
+    if (passFlipped) {
+      front.setAttribute("aria-hidden", "true");
+      back.removeAttribute("aria-hidden");
+    } else {
+      front.removeAttribute("aria-hidden");
+      back.setAttribute("aria-hidden", "true");
+    }
+    if (changed) markFlipping();
+  };
+
+  setFlipped(false);
+
+  card.addEventListener("click", (event) => {
+    // A drag also produces a click in Chromium. The lanyard marks that
+    // case so throwing the card does not flip it.
+    if (card.dataset.justDragged === "true") {
+      delete card.dataset.justDragged;
+      return;
+    }
+    if (event.target.closest("a, button, input, textarea, select, label, [data-no-flip]")) {
+      return;
+    }
+    setFlipped(!passFlipped);
+  });
+
+  root.querySelectorAll("[data-flip]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setFlipped(button.dataset.flip === "back");
+    });
+  });
+
+  card.addEventListener("keydown", (event) => {
+    if (event.target !== card) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setFlipped(!passFlipped);
+    }
   });
 }
 
 function setPageNotice(message, tone = "ok") {
   pageNotice = message;
   pageTone = tone;
+  const status = root.querySelector("#profile-page-status");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+  status.hidden = !message;
+  armNoticeTimer();
 }
 
 function clearPageNotice() {
@@ -420,7 +765,13 @@ function clearPageNotice() {
     noticeTimer = null;
   }
   pageNotice = "";
-  root.querySelector(".profile-page-status")?.remove();
+  pageTone = "ok";
+  const status = root.querySelector("#profile-page-status");
+  if (status) {
+    status.textContent = "";
+    status.hidden = true;
+    status.removeAttribute("data-tone");
+  }
 }
 
 function armNoticeTimer() {

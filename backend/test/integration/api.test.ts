@@ -330,19 +330,26 @@ describe.skipIf(!hasTestDatabase)("API integration", () => {
     expect(beacon.status).toBe(204);
 
     const now = new Date();
+    const since = new Date(now.getTime() - 3600_000).toISOString();
+    const until = new Date(now.getTime() + 3600_000).toISOString();
     const report = await request(app)
       .get("/api/admin/analytics")
-      .query({
-        since: new Date(now.getTime() - 3600_000).toISOString(),
-        until: new Date(now.getTime() + 3600_000).toISOString(),
-        tz: "Asia/Kolkata",
-      })
+      .query({ since, until, tz: "Asia/Kolkata" })
       .set("authorization", `Bearer ${adminToken}`);
 
     expect(report.status).toBe(200);
     expect(
       report.body.pages.some((page: { name: string }) => page.name === "/integration-analytics"),
     ).toBe(true);
+
+    // Chrome reports India as Asia/Calcutta; PostgreSQL only accepts
+    // Asia/Kolkata. Both names must produce the same buckets.
+    const alias = await request(app)
+      .get("/api/admin/analytics")
+      .query({ since, until, tz: "Asia/Calcutta" })
+      .set("authorization", `Bearer ${adminToken}`);
+    expect(alias.status).toBe(200);
+    expect(alias.body.series).toEqual(report.body.series);
 
     const rejected = await request(app)
       .post("/api/track")

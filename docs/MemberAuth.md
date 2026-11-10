@@ -51,18 +51,23 @@ notice.
 ## Account page
 
 `account.html` is the member profile page. It is private (`noindex`), requires
-a signed-in account, and shows:
+a signed-in account, and presents the member's details as a hanging member
+pass with the editable profile record below. The pass shows:
 
 - Avatar or initials
 - Display name
-- Email
 - Role
 - “Member since”
-- Website and GitHub links
+- Website and GitHub
+- A decorative member serial and barcode
+- A reverse side with Website, GitHub and Email links
 - Sign out
 - “Admin panel” link for admin/editor accounts
 
-The edit form updates:
+The pass can be dragged to swing and clicked to flip; use the clip as the
+drag handle on touch screens. The reverse side carries the working links.
+
+The edit form below the pass updates:
 
 - Display name
 - Bio
@@ -72,9 +77,9 @@ The edit form updates:
 The account page also has an event-email switch backed by
 `PATCH /api/account/email-preferences`.
 
-There is no public directory, badge or leaderboard on this page. The
-background is the same quiet pixel field used behind the admin gate, shared
-through `js/lib/pixel-field.js`.
+There is no public directory or leaderboard. The pass is private to the
+signed-in member. The background is the same quiet pixel field used behind
+the admin gate, shared through `js/lib/pixel-field.js`.
 
 ## Avatar upload
 

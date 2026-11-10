@@ -1,0 +1,1008 @@
+/* ====================================================================
+   PROFILE PAGE — THE HANGING MEMBER PASS
+   Loaded only by account.html. The shared stylesheet still provides
+   the tokens, form controls and account nav; this file adds the stage,
+   the pass and the record panel that replaces the old two-column view.
+   ==================================================================== */
+
+/* One vertical document: pass stage first, profile record underneath. */
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: min(1120px, calc(100% - (2 * var(--page-pad))));
+  margin: 0 auto;
+  padding: clamp(1.25rem, 2.5vw, 2rem) 0 calc(var(--section-pad) * 0.9);
+  gap: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.profile-page-status {
+  grid-column: auto;
+  margin: 0;
+  padding: 12px 16px;
+  border: 2px solid var(--rule-strong);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.profile-page-status[data-tone="error"] {
+  border-color: var(--live);
+  background: var(--live-soft);
+}
+
+.profile-loading {
+  text-align: center;
+  color: var(--ink-muted);
+}
+
+/* ----------------------------------------------------------------
+   THE STAGE
+   A rail, a peg, the lanyard and the pass. The height is calculated
+   from the card width so the record below never moves while the pass
+   drops in or settles.
+   ---------------------------------------------------------------- */
+.pass-stage {
+  --pass-width: clamp(
+    380px,
+    min(40vw, calc((100vh - 310px) / 1.27)),
+    640px
+  );
+  --pass-ratio: 1.27;
+  --pass-drop: clamp(140px, 9vw + 40px, 190px);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: calc(
+    (var(--pass-width) * var(--pass-ratio)) + var(--pass-drop) + 90px
+  );
+  padding: 18px 0;
+  border-bottom: 2px solid var(--rule);
+  overflow: hidden;
+  perspective: 1600px;
+}
+
+.pass-rail {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.pass-rail-line {
+  flex: 1;
+  height: 2px;
+  background: var(--rule-strong);
+}
+
+.pass-anchor {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 2px 2px 0 var(--ink);
+  transform: translateX(-50%);
+}
+
+.pass-anchor::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.pass-cast-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 230px;
+  height: 30px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.34), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+/* The strap itself. The path is redrawn while the pass is moving; these
+   layers give it a black edge, a yellow woven face and a stitch line. */
+.pass-strap {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pass-strap path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pass-strap-edge {
+  stroke: var(--ink);
+  stroke-width: 14;
+}
+
+.pass-strap-face {
+  stroke: var(--accent);
+  stroke-width: 9;
+}
+
+.pass-strap-stitch {
+  stroke: var(--accent-ink);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+
+.pass-strap-copy {
+  fill: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+/* ----------------------------------------------------------------
+   THE PASS
+   A printed two-sided object: cream stock, black rules, a yellow
+   header, a flip side with real links. It stays cream in dark mode,
+   like a real card on a dark desk.
+   ---------------------------------------------------------------- */
+.member-pass {
+  --pass-paper: #fffaf0;
+  --pass-ink: #0b0a08;
+  --pass-muted: #5b5549;
+  --pass-yellow: #fcce37;
+  --pass-yellow-ink: #0b0a08;
+  --pass-shadow-color: rgba(0, 0, 0, 0.16);
+  --pass-watermark-color: rgba(11, 10, 8, 0.05);
+  --pass-clip-bg: linear-gradient(180deg, #302d28 0%, #050504 62%, #25221e 100%);
+
+  position: relative;
+  z-index: 3;
+  display: block;
+  flex: none;
+  width: var(--pass-width);
+  aspect-ratio: 1 / var(--pass-ratio);
+  margin-top: var(--pass-drop);
+  border: 0;
+  background: transparent;
+  color: var(--pass-ink);
+  box-shadow: none;
+  transform-origin: 50% 0;
+  transform-style: preserve-3d;
+  container-type: inline-size;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+}
+
+.member-pass img {
+  -webkit-user-drag: none;
+}
+
+.pass-clip {
+  position: absolute;
+  top: calc(-1 * clamp(16px, 4cqw, 22px));
+  left: 50%;
+  z-index: 8;
+  width: clamp(52px, 13cqw, 68px);
+  height: clamp(30px, 7.4cqw, 38px);
+  border: 3px solid var(--pass-ink);
+  border-radius: 5px 5px 12px 12px;
+  background: var(--pass-clip-bg);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  transform: translateX(-50%);
+}
+
+.pass-clip::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: clamp(30px, 8cqw, 40px);
+  height: clamp(7px, 1.7cqw, 9px);
+  border: 2px solid var(--pass-ink);
+  border-radius: 6px;
+  background: var(--pass-yellow);
+  transform: translateX(-50%);
+}
+
+.pass-slot {
+  position: absolute;
+  top: clamp(10px, 2.2cqw, 14px);
+  left: 50%;
+  z-index: 2;
+  width: clamp(44px, 11cqw, 58px);
+  height: clamp(9px, 2.2cqw, 12px);
+  border: 2px solid var(--pass-ink);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+}
+
+/* Touch drags from here so a swipe on the card can still scroll the page. */
+.pass-grip {
+  position: absolute;
+  top: calc(-1 * clamp(17px, 4.4cqw, 24px));
+  left: 50%;
+  z-index: 9;
+  width: clamp(70px, 17cqw, 88px);
+  height: clamp(54px, 13cqw, 66px);
+  transform: translateX(-50%);
+  touch-action: none;
+  cursor: grab;
+}
+
+.pass-flipper {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.member-pass.is-flipped .pass-flipper {
+  transform: rotateY(180deg);
+}
+
+.pass-face {
+  --pass-pad: clamp(20px, 6cqw, 38px);
+  --pass-bottom: clamp(15px, 3.4cqw, 24px);
+  --pass-head-top: clamp(26px, 8cqw, 48px);
+  --pass-gap: clamp(8px, 2.4cqw, 16px);
+  --pass-space: clamp(10px, 3cqw, 20px);
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0 var(--pass-pad) var(--pass-bottom);
+  border: 3px solid var(--pass-ink);
+  background: var(--pass-paper);
+  color: var(--pass-ink);
+  box-shadow: 12px 16px 0 var(--pass-shadow-color);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.pass-face--back {
+  transform: rotateY(180deg);
+}
+
+.member-pass:not(.is-flipped) .pass-face--back,
+.member-pass.is-flipped .pass-face--front {
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* A faint printed watermark gives the lower half of the card something
+   to hold when the card is large; content stays above it. */
+.pass-face > :not(.pass-watermark):not(.pass-sheen):not(.pass-slot) {
+  position: relative;
+  z-index: 1;
+}
+
+.pass-watermark {
+  position: absolute;
+  right: clamp(12px, 3cqw, 20px);
+  bottom: clamp(46px, 12cqw, 70px);
+  z-index: 0;
+  font-family: var(--font-display);
+  font-size: clamp(5rem, 30cqw, 9rem);
+  font-weight: 800;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: var(--pass-watermark-color);
+  -webkit-text-stroke: 1px var(--pass-watermark-color);
+  pointer-events: none;
+  user-select: none;
+}
+
+.pass-watermark::after {
+  content: "";
+  display: block;
+  width: 62%;
+  height: 2px;
+  margin: 8px 0 0 auto;
+  background: var(--pass-watermark-color);
+}
+
+/* ---- header band ---- */
+.pass-head {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.6cqw, 9px);
+  margin: 0 calc(-1 * var(--pass-pad));
+  padding: var(--pass-head-top) var(--pass-pad) clamp(9px, 2cqw, 12px);
+  border-bottom: 2px solid var(--pass-yellow-ink);
+  background: var(--pass-yellow);
+  color: var(--pass-yellow-ink);
+  font-size: clamp(0.56rem, 2.6cqw, 1rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.pass-head img {
+  flex: none;
+  width: clamp(22px, 7.2cqw, 44px);
+  height: auto;
+  object-fit: contain;
+}
+
+.pass-brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.pass-kind {
+  flex: none;
+  font-size: clamp(0.5rem, 2.1cqw, 0.78rem);
+  text-align: right;
+}
+
+/* ---- front ---- */
+.pass-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pass-gap);
+  padding-top: clamp(13px, 3.6cqw, 22px);
+  text-align: center;
+}
+
+.avatar.pass-avatar {
+  width: clamp(80px, 22cqw, 136px);
+  height: clamp(80px, 22cqw, 136px);
+  font-size: clamp(1.5rem, 4.5cqw, 2.4rem);
+  box-shadow:
+    0 0 0 3px var(--pass-paper),
+    0 0 0 6px var(--pass-yellow),
+    0 0 0 8px var(--pass-ink);
+}
+
+.pass-name {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 8.2cqw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.pass-role {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 2px solid var(--pass-yellow-ink);
+  background: var(--pass-yellow);
+  color: var(--pass-yellow-ink);
+  font-size: clamp(0.6rem, 2.3cqw, 0.9rem);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.pass-facts {
+  display: grid;
+  gap: clamp(4px, 1cqw, 6px);
+  width: 100%;
+  margin: var(--pass-space) 0 0;
+  padding: clamp(9px, 2.2cqw, 14px) 0;
+  border-block: 2px solid var(--pass-ink);
+  font-size: clamp(0.72rem, 3.3cqw, 1.05rem);
+  line-height: 1.35;
+}
+
+.pass-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pass-facts dt {
+  flex: none;
+  color: var(--pass-muted);
+  font-size: clamp(0.52rem, 1.9cqw, 0.68rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pass-facts dd {
+  min-width: 0;
+  max-width: 68%;
+  margin: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pass-facts a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.pass-facts a:hover {
+  background: var(--pass-yellow);
+  color: var(--pass-yellow-ink);
+}
+
+.pass-front-bio {
+  display: -webkit-box;
+  margin: var(--pass-space) 0 0;
+  overflow: hidden;
+  color: var(--pass-muted);
+  font-size: clamp(0.72rem, 2.9cqw, 0.95rem);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.pass-front-actions {
+  display: flex;
+  justify-content: center;
+  padding-top: clamp(14px, 3.6cqw, 22px);
+}
+
+.pass-flip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.5cqw, 9px);
+  min-height: clamp(42px, 10cqw, 48px);
+  padding: clamp(9px, 2.2cqw, 12px) clamp(12px, 3.4cqw, 18px);
+  border: 2px solid var(--pass-ink);
+  background: var(--pass-yellow);
+  color: var(--pass-yellow-ink);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: clamp(0.68rem, 2.5cqw, 0.95rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pass-flip:hover {
+  background: var(--pass-yellow-ink);
+  color: var(--pass-yellow);
+}
+
+.pass-flip:focus-visible,
+.pass-link:focus-visible,
+.pass-facts a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.pass-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: clamp(12px, 3cqw, 18px);
+  padding-top: clamp(10px, 2.4cqw, 14px);
+  border-top: 2px solid var(--pass-ink);
+}
+
+.pass-serial {
+  font-size: clamp(0.6rem, 2cqw, 0.8rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.pass-barcode {
+  display: block;
+  width: clamp(96px, 26cqw, 132px);
+  height: clamp(18px, 4cqw, 22px);
+  opacity: 0.86;
+}
+
+.pass-barcode svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: var(--pass-ink);
+}
+
+/* ---- back ---- */
+.pass-back-identity {
+  display: grid;
+  gap: clamp(4px, 1.2cqw, 7px);
+  padding-top: clamp(14px, 3.6cqw, 22px);
+  text-align: left;
+}
+
+.pass-back-kicker {
+  margin: 0;
+  color: var(--pass-muted);
+  font-size: clamp(0.54rem, 1.9cqw, 0.7rem);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.pass-back-name {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 6.6cqw, 2.4rem);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pass-back-identity .pass-role {
+  justify-self: start;
+}
+
+.pass-back-bio {
+  display: -webkit-box;
+  margin: clamp(12px, 3cqw, 18px) 0 0;
+  overflow: hidden;
+  color: var(--pass-muted);
+  font-size: clamp(0.74rem, 3cqw, 1rem);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+.pass-links {
+  display: grid;
+  gap: clamp(8px, 2cqw, 12px);
+  margin-top: clamp(14px, 3.6cqw, 22px);
+}
+
+.pass-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(8px, 2cqw, 12px);
+  padding: clamp(10px, 2.6cqw, 15px) clamp(12px, 3cqw, 16px);
+  border: 2px solid var(--pass-ink);
+  background: var(--pass-paper);
+  color: inherit;
+  text-decoration: none;
+}
+
+.pass-link:hover {
+  background: var(--pass-yellow);
+  color: var(--pass-yellow-ink);
+}
+
+.pass-link-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pass-link-label {
+  color: var(--pass-muted);
+  font-size: clamp(0.54rem, 1.8cqw, 0.7rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pass-link:hover .pass-link-label {
+  color: var(--pass-yellow-ink);
+}
+
+.pass-link-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(0.78rem, 3.1cqw, 1.05rem);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pass-link-arrow {
+  flex: none;
+  font-size: clamp(0.95rem, 2.6cqw, 1.3rem);
+  font-weight: 700;
+}
+
+.pass-links-empty {
+  color: var(--pass-muted);
+  font-size: clamp(0.68rem, 2.4cqw, 0.9rem);
+  line-height: 1.5;
+}
+
+.pass-back-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(8px, 2cqw, 12px);
+  padding-top: clamp(12px, 3cqw, 18px);
+  border-top: 2px solid var(--pass-ink);
+}
+
+.pass-back-foot .pass-flip {
+  min-height: clamp(38px, 8.5cqw, 44px);
+  padding: clamp(7px, 1.8cqw, 10px) clamp(10px, 2.8cqw, 15px);
+}
+
+/* ---- plastic sheen ---- */
+.pass-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: linear-gradient(
+    115deg,
+    transparent 24%,
+    rgba(255, 255, 255, 0.58) 43%,
+    rgba(255, 255, 255, 0.12) 52%,
+    transparent 68%
+  );
+  background-position: 50% 42%;
+  background-size: 220% 220%;
+  mix-blend-mode: screen;
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+/* In dark mode the pass becomes a dark laminated card with cream ink,
+   not a floating cream card. The yellow band and lanyard stay brand. */
+[data-theme="dark"] .member-pass {
+  --pass-paper: #1b1915;
+  --pass-ink: #fff7e4;
+  --pass-muted: #b9b2a4;
+  --pass-shadow-color: rgba(255, 247, 228, 0.16);
+  --pass-watermark-color: rgba(255, 247, 228, 0.07);
+  --pass-clip-bg: linear-gradient(180deg, #3b3730 0%, #15130f 62%, #2a2721 100%);
+}
+
+[data-theme="dark"] .pass-sheen {
+  opacity: 0.18;
+}
+
+.pass-hint {
+  position: relative;
+  z-index: 2;
+  margin: 14px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pass-hint-coarse {
+  display: none;
+}
+
+.pass-hint-keys {
+  opacity: 0.7;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .member-pass {
+    cursor: grab;
+  }
+
+  .pass-stage.is-dragging .member-pass {
+    cursor: grabbing;
+  }
+
+  .pass-stage.is-dragging .pass-grip {
+    cursor: grabbing;
+  }
+}
+
+@media (pointer: coarse) {
+  .pass-hint-fine {
+    display: none;
+  }
+
+  .pass-hint-coarse {
+    display: inline;
+  }
+}
+
+.pass-stage[data-motion="static"] .member-pass {
+  cursor: default;
+}
+
+.pass-stage[data-motion="static"] .pass-grip {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ----------------------------------------------------------------
+   THE RECORD
+   The editable layer below the pass. It deliberately stays on the
+   same page, so editing never hides the card it describes. The yellow
+   top bar carries the brand colour down into the form.
+   ---------------------------------------------------------------- */
+.profile-record {
+  padding: clamp(20px, 4vw, 32px);
+  border: 3px solid var(--rule-strong);
+  border-top: 8px solid var(--accent);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink);
+}
+
+.profile-record-head {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--rule);
+}
+
+.profile-record-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 1.9rem);
+  line-height: 1.1;
+}
+
+.profile-record-sub {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.profile-record-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.8fr);
+  gap: clamp(1.2rem, 3vw, 2rem);
+  align-items: start;
+}
+
+.profile-record .profile-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.profile-record .profile-form textarea {
+  min-height: 150px;
+}
+
+.profile-aside {
+  display: grid;
+  gap: 16px;
+}
+
+.record-block {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 2px solid var(--rule);
+}
+
+.record-block:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.record-block h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.record-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar.record-avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 1.2rem;
+  box-shadow:
+    0 0 0 2px var(--paper-raised),
+    0 0 0 4px var(--accent),
+    0 0 0 6px var(--rule-strong);
+}
+
+.profile-aside .profile-avatar-actions {
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 150px;
+}
+
+.profile-aside .profile-session-actions {
+  justify-content: flex-start;
+  width: auto;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.profile-aside .profile-preference {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.profile-aside .profile-preference strong {
+  font-size: 0.78rem;
+}
+
+.profile-aside .profile-preference span {
+  font-size: 0.68rem;
+}
+
+.record-help {
+  color: var(--ink-muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------
+   RESPONSIVE
+   ---------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .profile-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Once the form stacks, its two field columns become too narrow. */
+  .profile-record .profile-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .pass-stage {
+    --pass-width: clamp(
+      288px,
+      min(90vw, 380px, calc((100vh - 240px) / 1.4)),
+      380px
+    );
+    --pass-ratio: 1.34;
+    --pass-drop: 110px;
+
+    min-height: calc(
+      (var(--pass-width) * var(--pass-ratio)) + var(--pass-drop) + 90px
+    );
+    padding-top: 16px;
+  }
+
+  .pass-anchor {
+    top: 9px;
+  }
+
+  .pass-name {
+    -webkit-line-clamp: 2;
+  }
+
+  .pass-front-bio {
+    -webkit-line-clamp: 2;
+  }
+
+  .pass-watermark,
+  .pass-back-bio {
+    display: none;
+  }
+
+  .pass-hint {
+    font-size: 0.58rem;
+  }
+
+  .pass-hint-keys {
+    display: none;
+  }
+
+  .profile-record {
+    padding: 20px;
+  }
+
+  .profile-record-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  .pass-stage {
+    --pass-ratio: 1.4;
+    --pass-drop: 92px;
+
+    min-height: calc(
+      (var(--pass-width) * var(--pass-ratio)) + var(--pass-drop) + 90px
+    );
+  }
+
+  /* On the smallest cards the card itself is the flip control; the
+     hint under the pass explains it. */
+  .pass-front-bio,
+  .pass-front-actions {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) and (max-height: 650px) {
+  /* The height cap narrows the card on very short screens; shorten the
+     lanyard and drop the optional front copy so the identity and facts
+     stay readable without clipping. */
+  .pass-stage {
+    --pass-drop: 64px;
+    --pass-ratio: 1.4;
+  }
+
+  .pass-front-bio,
+  .pass-front-actions {
+    display: none;
+  }
+}
+
+/* Inside a smaller card the long-form copy is clamped; the full text
+   stays in the profile record underneath. */
+@container (max-width: 600px) {
+  .pass-name {
+    -webkit-line-clamp: 2;
+  }
+
+  .pass-front-bio {
+    -webkit-line-clamp: 2;
+  }
+
+  .pass-back-bio {
+    -webkit-line-clamp: 3;
+  }
+}
+
+@container (max-width: 450px) {
+  /* Smaller cards keep the identity, facts and action; the bio is
+     always available in the record directly underneath. */
+  .pass-front-bio {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .member-pass {
+    will-change: auto;
+  }
+}
