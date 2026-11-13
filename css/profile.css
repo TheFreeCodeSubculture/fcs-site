@@ -62,7 +62,9 @@
   );
   padding: 18px 0;
   border-bottom: 2px solid var(--rule);
-  overflow: hidden;
+  /* No overflow clip: a swinging card may cross the column edge. The
+     body already hides horizontal overflow at the viewport. */
+  z-index: 2;
   perspective: 1600px;
 }
 
@@ -135,23 +137,17 @@
   pointer-events: none;
 }
 
-.pass-strap path {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
+/* Edge and face are filled ribbons so their width can show the twist. */
 .pass-strap-edge {
-  stroke: var(--ink);
-  stroke-width: 14;
+  fill: var(--ink);
 }
 
 .pass-strap-face {
-  stroke: var(--accent);
-  stroke-width: 9;
+  fill: var(--accent);
 }
 
 .pass-strap-stitch {
+  fill: none;
   stroke: var(--accent-ink);
   stroke-width: 1;
   stroke-dasharray: 2 3;
@@ -216,7 +212,14 @@
   border-radius: 5px 5px 12px 12px;
   background: var(--pass-clip-bg);
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.25);
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateZ(2px);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* The clip grips both sides of the card, so the back shows one too. */
+.pass-clip--back {
+  transform: translateX(-50%) rotateY(180deg) translateZ(2px);
 }
 
 .pass-clip::before {
@@ -254,22 +257,20 @@
   z-index: 9;
   width: clamp(70px, 17cqw, 88px);
   height: clamp(54px, 13cqw, 66px);
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateZ(3px);
   touch-action: none;
   cursor: grab;
 }
 
+/* The whole pass turns on its strap (lanyard.js sets rotateY on
+   .member-pass), so the clip turns with it instead of the card spinning
+   through a clip that stays still. */
 .pass-flipper {
   position: absolute;
   inset: 0;
   display: block;
   pointer-events: none;
   transform-style: preserve-3d;
-  transition: transform 0.5s cubic-bezier(0.45, 0, 0.55, 1);
-}
-
-.member-pass.is-flipped .pass-flipper {
-  transform: rotateY(180deg);
 }
 
 .pass-face {
@@ -305,11 +306,24 @@
   box-shadow: none;
 }
 
+/* While the card turns, links and buttons sweep under a still cursor;
+   without this their hover colours flash on and off with the wobble. */
+.member-pass.is-turning .pass-face {
+  pointer-events: none;
+}
+
 /* A faint printed watermark gives the lower half of the card something
    to hold when the card is large; content stays above it. */
-.pass-face > :not(.pass-watermark):not(.pass-sheen):not(.pass-slot) {
+.pass-face > :not(.pass-watermark):not(.pass-sheen):not(.pass-slot):not(.pass-identity),
+.pass-identity > * {
   position: relative;
   z-index: 1;
+}
+
+/* The sheen only lightens, which washes out a photo. The identity block
+   makes no stacking context, so the portrait alone can sit above it. */
+.pass-identity > .pass-portrait {
+  z-index: 4;
 }
 
 .pass-watermark {
@@ -717,6 +731,33 @@
   display: none;
 }
 
+/* Stacked layouts put the record below a tall stage; this says so. */
+.pass-edit-link {
+  position: relative;
+  z-index: 2;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border: 2px solid var(--rule-strong);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.pass-edit-link:hover {
+  background: var(--ink);
+  color: var(--accent);
+}
+
+.pass-edit-link:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .pass-hint-keys {
   opacity: 0.7;
 }
@@ -761,19 +802,35 @@
    top bar carries the brand colour down into the form.
    ---------------------------------------------------------------- */
 .profile-record {
-  padding: clamp(20px, 4vw, 32px);
+  scroll-margin-top: 4.5rem;
+  display: grid;
+  gap: clamp(14px, 2.2vh, 20px);
+  padding: clamp(20px, 3vw, 30px);
   border: 3px solid var(--rule-strong);
   border-top: 8px solid var(--accent);
   background: var(--paper-raised);
   box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink);
 }
 
+/* Photo, title and photo actions share one row: the photo comes first
+   on the record without costing any extra height. */
 .profile-record-head {
   display: grid;
-  gap: 3px;
-  margin-bottom: 22px;
-  padding-bottom: 18px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px 20px;
+  padding-bottom: clamp(14px, 2.2vh, 18px);
   border-bottom: 2px solid var(--rule);
+}
+
+.profile-record-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.profile-record-title .auth-kicker {
+  margin: 0;
 }
 
 .profile-record-head h2 {
@@ -784,41 +841,83 @@
 }
 
 .profile-record-sub {
+  margin: 0;
   color: var(--ink-muted);
   font-size: 0.78rem;
   overflow-wrap: anywhere;
 }
 
-.profile-record-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(250px, 0.8fr);
-  gap: clamp(1.2rem, 3vw, 2rem);
-  align-items: start;
+.avatar.record-avatar {
+  width: 76px;
+  height: 76px;
+  font-size: 1.35rem;
+  box-shadow:
+    0 0 0 2px var(--paper-raised),
+    0 0 0 4px var(--accent),
+    0 0 0 6px var(--rule-strong);
 }
 
+.record-photo {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  max-width: 230px;
+  text-align: right;
+}
+
+.record-photo .profile-avatar-actions {
+  justify-content: flex-end;
+}
+
+.record-photo .auth-status {
+  margin: 0;
+}
+
+.record-help {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+/* Three short fields on one row, the bio under them. */
 .profile-record .profile-form {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .profile-record .profile-form textarea {
-  min-height: 150px;
+  min-height: 96px;
+  resize: vertical;
 }
 
-.profile-aside {
+/* Save messages sit beside the button instead of adding empty rows. */
+.profile-record .profile-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.profile-record .profile-form-actions .auth-error,
+.profile-record .profile-form-actions .auth-status {
+  margin: 0;
+}
+
+/* Email and Account side by side, so neither needs a scroll. */
+.profile-settings {
   display: grid;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .record-block {
   display: grid;
+  align-content: start;
   gap: 10px;
-  padding-top: 16px;
-  border-top: 2px solid var(--rule);
-}
-
-.record-block:first-child {
-  padding-top: 0;
-  border-top: 0;
+  padding: 14px 16px;
+  border: 2px solid var(--rule);
+  background: var(--paper);
 }
 
 .record-block h3 {
@@ -830,30 +929,11 @@
   text-transform: uppercase;
 }
 
-.record-photo-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+.record-block .auth-status {
+  margin: 0;
 }
 
-.avatar.record-avatar {
-  width: 64px;
-  height: 64px;
-  font-size: 1.2rem;
-  box-shadow:
-    0 0 0 2px var(--paper-raised),
-    0 0 0 4px var(--accent),
-    0 0 0 6px var(--rule-strong);
-}
-
-.profile-aside .profile-avatar-actions {
-  justify-content: flex-start;
-  flex: 1;
-  min-width: 150px;
-}
-
-.profile-aside .profile-session-actions {
+.profile-settings .profile-session-actions {
   justify-content: flex-start;
   width: auto;
   margin-top: 0;
@@ -861,35 +941,86 @@
   border-top: 0;
 }
 
-.profile-aside .profile-preference {
+.profile-settings .profile-preference {
   padding-top: 0;
   border-top: 0;
 }
 
-.profile-aside .profile-preference strong {
+.profile-settings .profile-preference strong {
   font-size: 0.78rem;
 }
 
-.profile-aside .profile-preference span {
+.profile-settings .profile-preference span {
   font-size: 0.68rem;
-}
-
-.record-help {
-  color: var(--ink-muted);
-  font-size: 0.64rem;
-  line-height: 1.5;
 }
 
 /* ----------------------------------------------------------------
    RESPONSIVE
    ---------------------------------------------------------------- */
-@media (max-width: 900px) {
-  .profile-record-grid {
-    grid-template-columns: 1fr;
+
+/* Wide screens: the pass hangs in a sticky column beside the record,
+   so edits show on the card as they are made and neither is below the
+   fold. The pass is sized to fit the viewport height. */
+@media (min-width: 1100px) {
+  .profile-page {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    width: min(1400px, calc(100% - (2 * var(--page-pad))));
   }
 
-  /* Once the form stacks, its two field columns become too narrow. */
+  .profile-page-status,
+  .profile-loading {
+    grid-column: 1 / -1;
+  }
+
+  .pass-stage {
+    --pass-drop: clamp(110px, 12vh, 160px);
+    --pass-width: clamp(
+      300px,
+      min(
+        calc(min(1400px, 100vw) * 0.36),
+        calc((100svh - 3.5rem - var(--pass-drop) - 150px) / var(--pass-ratio))
+      ),
+      560px
+    );
+
+    position: sticky;
+    top: calc(3.25rem + 12px);
+    border-bottom: 0;
+  }
+
+  .pass-edit-link {
+    display: none;
+  }
+}
+
+/* Between the two-column layout and phones, the record column can be
+   narrow: fields go two up and the photo actions drop under the title. */
+@media (min-width: 1100px) and (max-width: 1350px), (max-width: 760px) {
   .profile-record .profile-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-record-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .record-photo {
+    grid-column: 1 / -1;
+    justify-items: start;
+    max-width: none;
+    text-align: left;
+  }
+
+  .record-photo .profile-avatar-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 600px) {
+  .profile-record .profile-form,
+  .profile-settings {
     grid-template-columns: 1fr;
   }
 }
@@ -937,10 +1068,6 @@
 
   .profile-record {
     padding: 20px;
-  }
-
-  .profile-record-grid {
-    grid-template-columns: 1fr;
   }
 }
 

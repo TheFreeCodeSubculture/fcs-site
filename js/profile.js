@@ -112,17 +112,20 @@ function renderProfile() {
       <span class="pass-cast-shadow" aria-hidden="true"></span>
 
       <svg class="pass-strap" aria-hidden="true" focusable="false">
-        <path class="pass-strap-edge" id="pass-strap-path"></path>
+        <path class="pass-strap-edge"></path>
         <path class="pass-strap-face"></path>
-        <path class="pass-strap-stitch"></path>
-        <text class="pass-strap-copy">
-          <textPath href="#pass-strap-path" startOffset="2">FREE CODE SUBCULTURE · FCS · </textPath>
-        </text>
+        <g class="pass-strap-print">
+          <path class="pass-strap-stitch" id="pass-strap-path"></path>
+          <text class="pass-strap-copy">
+            <textPath href="#pass-strap-path" startOffset="2">FREE CODE SUBCULTURE · FCS · </textPath>
+          </text>
+        </g>
       </svg>
 
       <article class="member-pass" id="member-pass" tabindex="0"
         aria-label="Member pass for ${escapeAttr(name)}" aria-describedby="pass-hint">
         <span class="pass-clip" aria-hidden="true"></span>
+        <span class="pass-clip pass-clip--back" aria-hidden="true"></span>
         <span class="pass-grip" aria-hidden="true"></span>
 
         <div class="pass-flipper" id="pass-flipper">
@@ -200,87 +203,83 @@ function renderProfile() {
         <span class="pass-hint-fine">Drag to swing. Click to flip. Arrow keys work too.</span>
         <span class="pass-hint-coarse">Drag from the clip. Tap to flip.</span>
       </p>
+      <a class="pass-edit-link" href="#profile-record">Edit your details ↓</a>
     </section>
 
-    <section class="profile-record" aria-labelledby="profile-record-title">
+    <section class="profile-record" id="profile-record" aria-labelledby="profile-record-title">
       <div class="profile-record-head">
-        <p class="auth-kicker">// PROFILE RECORD</p>
-        <h2 id="profile-record-title">Profile details</h2>
-        <p class="profile-record-sub">
-          Signed in as <span id="record-email">${escapeHTML(profile.email || "")}</span>.
-          Changes appear on your pass.
-        </p>
+        <div id="record-avatar-slot">
+          ${avatarHTML({ name, avatar }, "avatar record-avatar")}
+        </div>
+        <div class="profile-record-title">
+          <p class="auth-kicker">// PROFILE RECORD</p>
+          <h2 id="profile-record-title">Profile details</h2>
+          <p class="profile-record-sub">
+            Signed in as <span id="record-email">${escapeHTML(profile.email || "")}</span>.
+            Changes appear on your pass.
+          </p>
+        </div>
+        <div class="record-photo" role="group" aria-label="Photo">
+          <div class="profile-avatar-actions">
+            <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+            <button type="button" class="btn-subscribe" id="avatar-change"><span>Change photo</span></button>
+            <button type="button" class="link-button" id="avatar-remove"${profile.avatar_url ? "" : " hidden"}>Remove photo</button>
+          </div>
+          <p class="record-help">JPG, PNG or WebP, up to 10 MB. Cropped to 512 px.</p>
+          <p class="auth-status" id="avatar-status" role="status"></p>
+        </div>
       </div>
 
-      <div class="profile-record-grid">
-        <form class="profile-form" id="profile-form" novalidate>
-          <label class="auth-field">
-            <span>Display name</span>
-            <input name="display_name" type="text" autocomplete="name" maxlength="80"
-              value="${escapeAttr(profile.display_name || "")}" required />
-          </label>
-          <label class="auth-field">
-            <span>Website</span>
-            <input name="website_url" type="url" autocomplete="url" maxlength="500"
-              placeholder="https://example.com" value="${escapeAttr(profile.website_url || "")}" />
-          </label>
-          <label class="auth-field">
-            <span>GitHub username</span>
-            <input name="github_username" type="text" autocomplete="off" maxlength="40"
-              placeholder="octocat" value="${escapeAttr(profile.github_username || "")}" />
-          </label>
-          <label class="auth-field profile-field-wide">
-            <span>Bio</span>
-            <textarea name="bio" maxlength="1200" rows="5" placeholder="What are you learning or building?">${escapeHTML(profile.bio || "")}</textarea>
-          </label>
+      <form class="profile-form" id="profile-form" novalidate>
+        <label class="auth-field">
+          <span>Display name</span>
+          <input name="display_name" type="text" autocomplete="name" maxlength="80"
+            value="${escapeAttr(profile.display_name || "")}" required />
+        </label>
+        <label class="auth-field">
+          <span>Website</span>
+          <input name="website_url" type="url" autocomplete="url" maxlength="500"
+            placeholder="https://example.com" value="${escapeAttr(profile.website_url || "")}" />
+        </label>
+        <label class="auth-field">
+          <span>GitHub username</span>
+          <input name="github_username" type="text" autocomplete="off" maxlength="40"
+            placeholder="octocat" value="${escapeAttr(profile.github_username || "")}" />
+        </label>
+        <label class="auth-field profile-field-wide">
+          <span>Bio</span>
+          <textarea name="bio" maxlength="1200" rows="4" placeholder="What are you learning or building?">${escapeHTML(profile.bio || "")}</textarea>
+        </label>
+        <div class="profile-form-actions">
+          <button type="submit" class="auth-submit btn-subscribe"><span>Save profile</span></button>
           <p class="auth-error" role="alert"></p>
           <p class="auth-status" role="status"></p>
-          <div class="profile-form-actions">
-            <button type="submit" class="auth-submit btn-subscribe"><span>Save profile</span></button>
-            <a class="link-button" href="./">Back to the RFC</a>
+        </div>
+      </form>
+
+      <div class="profile-settings">
+        <section class="record-block" aria-labelledby="record-email-title">
+          <h3 id="record-email-title">Email</h3>
+          <div class="profile-preference">
+            <div>
+              <strong>Event emails</strong>
+              <span>Updates about events and the club.</span>
+            </div>
+            <button type="button" class="profile-switch${profile.email_updates ? " is-on" : ""}"
+              id="email-updates" role="switch" aria-checked="${profile.email_updates}">
+              ${profile.email_updates ? "On" : "Off"}
+            </button>
           </div>
-        </form>
+          <p class="auth-status" id="preference-status" role="status"></p>
+        </section>
 
-        <aside class="profile-aside">
-          <section class="record-block" aria-labelledby="record-photo-title">
-            <h3 id="record-photo-title">Photo</h3>
-            <div class="record-photo-row">
-              <div id="record-avatar-slot">
-                ${avatarHTML({ name, avatar }, "avatar record-avatar")}
-              </div>
-              <div class="profile-avatar-actions">
-                <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
-                <button type="button" class="btn-subscribe" id="avatar-change"><span>Change photo</span></button>
-                <button type="button" class="link-button" id="avatar-remove"${profile.avatar_url ? "" : " hidden"}>Remove photo</button>
-              </div>
-            </div>
-            <p class="auth-status" id="avatar-status" role="status"></p>
-            <p class="record-help">JPG, PNG or WebP, up to 10 MB. Photos are cropped and resized to 512 px before upload.</p>
-          </section>
-
-          <section class="record-block" aria-labelledby="record-email-title">
-            <h3 id="record-email-title">Email</h3>
-            <div class="profile-preference">
-              <div>
-                <strong>Event emails</strong>
-                <span>Updates about events and the club.</span>
-              </div>
-              <button type="button" class="profile-switch${profile.email_updates ? " is-on" : ""}"
-                id="email-updates" role="switch" aria-checked="${profile.email_updates}">
-                ${profile.email_updates ? "On" : "Off"}
-              </button>
-            </div>
-            <p class="auth-status" id="preference-status" role="status"></p>
-          </section>
-
-          <section class="record-block" aria-labelledby="record-account-title">
-            <h3 id="record-account-title">Account</h3>
-            <div class="profile-session-actions">
-              ${adminLink}
-              <button type="button" class="link-button" id="profile-signout">Sign out</button>
-            </div>
-          </section>
-        </aside>
+        <section class="record-block" aria-labelledby="record-account-title">
+          <h3 id="record-account-title">Account</h3>
+          <div class="profile-session-actions">
+            ${adminLink}
+            <button type="button" class="link-button" id="profile-signout">Sign out</button>
+          </div>
+        </section>
       </div>
     </section>`;
 
@@ -684,26 +683,16 @@ function bindSignOut() {
 
 function bindPass() {
   const card = root.querySelector("#member-pass");
-  const flipper = root.querySelector("#pass-flipper");
   const front = root.querySelector("#pass-front");
   const back = root.querySelector("#pass-back");
-  if (!card || !flipper || !front || !back) return;
+  if (!card || !front || !back) return;
 
-  let flipTimer = 0;
-
-  const markFlipping = () => {
-    flipper.style.willChange = "transform";
-    if (flipTimer) clearTimeout(flipTimer);
-    flipTimer = setTimeout(() => {
-      flipper.style.willChange = "auto";
-      flipTimer = 0;
-    }, 550);
-  };
-
+  // The lanyard turns the card on its strap; this keeps focus and the
+  // accessibility tree on the side that is facing the reader.
   const setFlipped = (value) => {
     const next = Boolean(value);
-    const changed = next !== passFlipped;
     passFlipped = next;
+    lanyard?.setFlipped(next);
     card.classList.toggle("is-flipped", passFlipped);
     front.toggleAttribute("inert", passFlipped);
     back.toggleAttribute("inert", !passFlipped);
@@ -714,7 +703,6 @@ function bindPass() {
       front.removeAttribute("aria-hidden");
       back.setAttribute("aria-hidden", "true");
     }
-    if (changed) markFlipping();
   };
 
   setFlipped(false);
