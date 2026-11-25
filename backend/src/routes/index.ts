@@ -13,7 +13,7 @@ import {
   contentAdminRouter,
   contentPublicRouter,
 } from "./content.routes.js";
-import { githubAdminRouter } from "./github.routes.js";
+import { githubAdminRouter, githubPublicRouter } from "./github.routes.js";
 import { integrationsRouter } from "./integrations.routes.js";
 import {
   mailingAdminRouter,
@@ -36,6 +36,7 @@ export function registerRoutes(app: Express) {
 
   app.use("/api/public", contentPublicRouter);
   app.use("/api/public", blogPublicRouter);
+  app.use("/api/public", githubPublicRouter);
 
   app.use("/api/admin", analyticsAdminRouter);
   app.use("/api/admin", mediaAdminRouter);

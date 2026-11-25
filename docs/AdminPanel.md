@@ -282,7 +282,7 @@ The footer's "Connect" column links and any platform icons used in the site head
 
 **Route:** `#/repos`
 
-Lists every public repository in the `TheFreeCodeSubculture` GitHub organisation. Data comes from `data/github.json` (refreshed by the deploy workflow).
+Lists every public repository in the `TheFreeCodeSubculture` GitHub organisation. Data comes from the backend's ten-minute cache (`GET /api/public/repositories`). **Refresh now** asks the backend to re-read GitHub; no site deploy is needed.
 
 For each repo:
 

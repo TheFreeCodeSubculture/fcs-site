@@ -48,6 +48,8 @@ const EnvSchema = z.object({
   MAIL_FROM_NAME: z.string().default("The Free Code Subculture"),
   GITHUB_ASSETS_TOKEN: z.string().optional(),
   GITHUB_DISPATCH_TOKEN: z.string().optional(),
+  GITHUB_READ_TOKEN: z.string().optional(),
+  GITHUB_ORG: z.string().min(1).default("TheFreeCodeSubculture"),
   UNSPLASH_ACCESS_KEY: z.string().optional(),
 });
 

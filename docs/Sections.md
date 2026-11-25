@@ -8,7 +8,7 @@ Each section of `index.html` is documented here: its HTML structure, the JavaScr
 
 **HTML:** `<header class="doc-header">`
 
-A five-column flex row styled after an IETF RFC memo header block. All five columns are static HTML; the "Last commit" value is filled by `js/main.js` after `data/github.json` is read.
+A five-column flex row styled after an IETF RFC memo header block. All five columns are static HTML; the "Last commit" value is filled by `js/main.js` from the backend's repository snapshot.
 
 ```
 Network Working Group   The Free Code Subculture
@@ -92,14 +92,14 @@ Each principle renders as a `<article>` with a monospace counter, title, and bod
 
 **JS:** `js/main.js`, async. Data flows:
 
-1. Fetch `data/github.json` (written by the deploy workflow).
-2. If stale (>3 h) or missing, fall back to the GitHub API (`api.github.com/orgs/TheFreeCodeSubculture/repos?type=public&per_page=100`).
-3. Apply per-repo overrides from Supabase `repo_kinds` table (show/hide, group link, pin).
+1. Fetch `GET /api/public/repositories`. The backend caches the organisation's repos and newest commit for 10 minutes.
+2. If the backend is unreachable, fall back to the GitHub API (`api.github.com/orgs/TheFreeCodeSubculture/repos?type=public&per_page=100`).
+3. Apply per-repo overrides from the backend `repo_kinds` table (show/hide, group link, pin).
 4. Render pinned repos first, then the rest, with `js/render.js → coreCardHTML` / repo card HTML.
 
-**Activity ticker (`#activity-ticker`):** a horizontal scrolling strip of the latest commits across all repos, built from `data/github.json`.
+**Activity ticker (`#activity-ticker`):** a horizontal scrolling strip of the latest commits across all repos, built from the same repository snapshot.
 
-**Rate limit:** the site reads `data/github.json` (pre-fetched by the workflow) so the GitHub API limit (60 req/hr unauthenticated) almost never applies. If it does, the section degrades to a link to the org page and a warning.
+**Rate limit:** the backend spends at most a couple of GitHub requests every ten minutes, and visitors never call GitHub at all unless the backend is down. If both fail, the section degrades to a link to the org page and a warning.
 
 **Admin integration:** the Repositories page lets editors choose for each repo: **Projects** (default), **Resources** (shows under section 05 instead), or **Hidden**. **Pin to top** brings it to the front. **Link to study group** adds the repo to that group's card.
 

@@ -81,7 +81,7 @@ Browser → index.html
   → js/vendor/supabase.min.js
   → js/main.js (module)
       ├── Supabase: reads events, resources, study groups, core members, social links
-      ├── GitHub:  reads data/github.json (cached by deploy), falls back to API
+      ├── GitHub:  reads the backend's cached repository list, falls back to the API
       └── Renders each section progressively as data arrives
 ```
 
@@ -153,7 +153,7 @@ Discord                 Listed below
 Status                  ACTIVE
 ```
 
-This header is static HTML. The "last commit" value is populated by `js/main.js` from `data/github.json`.
+This header is static HTML. The "last commit" value is populated by `js/main.js` from the backend's repository snapshot.
 
 ### Sticky Navigation
 
@@ -167,7 +167,7 @@ A `<nav>` with the brand logotype and jump links to each section. On mobile it c
 | 01 | abstract | Abstract | Static HTML |
 | 02 | icarus | The Icarus Mark | Static HTML + `assets/fcs-mark-large.png` |
 | 03 | protocol | Operating Protocol | `js/data.js` → `PRINCIPLES[]` |
-| 04 | projects | Projects | `data/github.json` → GitHub API fallback |
+| 04 | projects | Projects | `GET /api/public/repositories` → GitHub API fallback |
 | 05 | resources | Resources | Supabase `resources` table |
 | 06 | study-groups | Study Groups | Supabase `study_groups` table |
 | 07 | events | Events | Supabase `events` + `class_sessions` tables |
@@ -178,7 +178,7 @@ A `<nav>` with the brand logotype and jump links to each section. On mobile it c
 
 #### Projects Section (04)
 
-Reads `data/github.json` on load; falls back to the GitHub API if the file is missing or more than 3 hours old. Repos can be pinned (shown first), shown under Resources, or hidden via the admin panel's Repositories page. Grouped repos are linked to their study group card.
+Reads `GET /api/public/repositories` on load. The backend caches GitHub's answer for ten minutes; if the backend is unreachable, the page falls back to the GitHub API directly. Repos can be pinned (shown first), shown under Resources, or hidden via the admin panel's Repositories page. Grouped repos are linked to their study group card.
 
 An **activity ticker** runs across the top of the section, pulled from the latest commit data.
 
@@ -495,7 +495,6 @@ All tools are plain Node.js ESM scripts in `tools/`. They have no watch mode; ea
 | `blog-build.mjs` | Writes `blog/index.html`, `blog/<slug>/index.html`, `blog/latest.html`, `sitemap.xml` |
 | `og.mjs` | Draws 1200×630 OG cards for each post, the blog, and the home page (satori + sharp) |
 | `events-feed.mjs` | Writes `events.ics` for calendar subscriptions |
-| `github-snapshot.mjs` | Writes `data/github.json` from the GitHub API |
 | `link-meta.mjs` | Fetches `<title>`, description, image for bookmark blocks |
 | `email-templates.mjs` | Pushes branded email templates to Supabase Auth |
 | `build-cover-gallery.mjs` | Builds `assets/cover-gallery.json` and renders cover textures |
@@ -506,16 +505,15 @@ All tools are plain Node.js ESM scripts in `tools/`. They have no watch mode; ea
 
 ### GitHub Actions Deploy
 
-`.github/workflows/pages.yml` runs on every push to `master`, every 30 minutes, and on demand:
+`.github/workflows/pages.yml` runs on every push to `master` and on demand:
 
 1. `npm ci`
 2. Run unit tests (`npm test`)
-3. `node tools/github-snapshot.mjs` → `data/github.json`
-4. `node tools/events-feed.mjs` → `events.ics`
-5. `node tools/blog-build.mjs` → `blog/`
-6. Publish with the GitHub Pages action
+3. `node tools/events-feed.mjs` → `events.ics`
+4. `node tools/blog-build.mjs` → `blog/`
+5. Upload the artifact, then deploy it in a separate job
 
-The `refresh-site` edge function triggers step 4–5 when an editor publishes or updates a post, without waiting for the 30-minute schedule.
+The backend's `refresh-site` route starts the workflow when an editor publishes or updates a post, or saves an event or class session, so the build does not wait for a schedule.
 
 ### Edge Functions
 

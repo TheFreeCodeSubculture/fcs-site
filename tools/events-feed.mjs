@@ -2,8 +2,9 @@
  * tools/events-feed.mjs
  * ------------------------------------------------------------------
  * Writes events.ics, the calendar feed people subscribe to from the
- * events section ("Add to your calendar"). Run by the deploy workflow
- * every 30 minutes, so subscribed calendars see new and changed events.
+ * events section ("Add to your calendar"). Run by the deploy workflow, and
+ * started by the admin panel when an event changes, so subscribed
+ * calendars see new and changed events.
  *
  * Reads events from the public API, so it only ever sees what a visitor
  * sees (no drafts). Keeps the last 60 days and everything ahead. If the

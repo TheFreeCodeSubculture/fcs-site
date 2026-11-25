@@ -12,7 +12,7 @@
  */
 
 /**
- * @param {object[]} repos rows from the GitHub API or snapshot
+ * @param {object[]} repos rows from the backend repository cache or the GitHub API
  * @param {object[]} kinds rows from the `repo_kinds` table
  * @returns {{projects: object[], resources: object[], byGroup: Map<string, object[]>}}
  *   resources carry an added `curated_note`; byGroup maps a study

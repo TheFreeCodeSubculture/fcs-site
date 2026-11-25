@@ -369,6 +369,17 @@ export async function getRepoKinds() {
   return publicList("/api/public/repo-kinds", []);
 }
 
+/* The backend caches the organisation's repositories for ten minutes, so a
+ * visitor never spends GitHub's anonymous allowance. Null means the API
+ * could not answer; callers can then try GitHub directly. */
+export async function getRepositories() {
+  try {
+    return await api("/api/public/repositories", { auth: false });
+  } catch {
+    return null;
+  }
+}
+
 /* ---- admin content --------------------------------------------------- */
 
 const RESOURCE = {
@@ -593,6 +604,9 @@ export async function listEmailSends() {
 /* ---- GitHub and cover picker integrations ---------------------------- */
 
 export const refreshSite = () => api("/api/admin/refresh-site", { method: "POST" });
+
+export const refreshRepositories = () =>
+  api("/api/admin/refresh-repositories", { method: "POST" });
 
 export async function uploadBlogImage(blob) {
   const form = new FormData();

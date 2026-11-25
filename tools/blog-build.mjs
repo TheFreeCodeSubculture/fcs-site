@@ -3,8 +3,8 @@
  * ------------------------------------------------------------------
  * Writes the blog as static pages: blog/index.html, blog/<slug>/index.html,
  * blog/latest.html (the home page's three newest)
- * and sitemap.xml. Run by the deploy workflow (every 30 minutes, on every
- * push, and when an editor publishes a post), and by hand to preview:
+ * and sitemap.xml. Run by the deploy workflow (on every push, and when an
+ * editor publishes a post), and by hand to preview:
  *
  *   node tools/blog-build.mjs
  *

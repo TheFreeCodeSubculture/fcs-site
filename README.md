@@ -94,7 +94,7 @@ directory. See [`docs/MemberAuth.md`](docs/MemberAuth.md).
 |---|---|
 | Principles, contribution lanes | Fixed page copy in `js/data.js` |
 | Events, schedule, resources, study groups, social links, core members, blog | PostgreSQL through the backend API |
-| Projects | GitHub API, refreshed into `data/github.json` by the deploy |
+| Projects | GitHub API through the backend, cached for 10 minutes |
 | Fallback for database content | the `SEED_*` arrays in `js/data.js` |
 
 The `SEED_*` arrays are a fallback only. Edit content in the admin panel, not
@@ -126,7 +126,8 @@ and branch protection is enabled.
   - rolls back to the previous release if the health check fails
 - `.github/workflows/pages.yml` builds the static blog and link-preview
   cards, stages only the frontend into `_site/`, and deploys GitHub Pages.
-  It runs on `master`, on a 30-minute schedule, and manually.
+  It runs on `master` and manually, and the admin panel starts it when a
+  post, event or class session changes.
 
 ## Backend security model
 

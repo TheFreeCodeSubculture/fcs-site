@@ -1,11 +1,17 @@
 # Builds and deploys the site to GitHub Pages.
 #
-# Runs on every push to master, every 30 minutes, and on demand. Each run
-# first refreshes data/github.json (repositories and the latest commit)
-# with this workflow's own token, so visitors never call the rate-limited
-# GitHub API themselves, and events.ics, the calendar feed people
-# subscribe to. The snapshot ships with the deployment; it is
-# never committed, so the git history stays clean.
+# Runs on every push to master and on demand. Each run rebuilds the static
+# pieces: events.ics, the calendar feed people subscribe to, and the blog
+# pages. Those are build output and are never committed, so the git history
+# stays clean. GitHub repository data is served by the backend's cache and
+# does not need a deploy.
+#
+# The admin panel starts this workflow through the backend's refresh-site
+# route whenever it changes something the static build reads: a published
+# blog post, an event or a class session. There is no polling schedule.
+#
+# Build and deploy are separate jobs on purpose: deploy-pages runs in a
+# fresh job, so it cannot race the artifact upload (actions/deploy-pages#451).
 #
 # One-time setup: Settings -> Pages -> Build and deployment -> Source:
 # "GitHub Actions".
@@ -14,8 +20,6 @@ name: Deploy site
 on:
   push:
     branches: [master]
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -28,20 +32,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     # Forks may run tests, but only the canonical organisation repository
     # may publish the production site.
     if: github.repository == 'TheFreeCodeSubculture/fcs-site'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       # satori and sharp draw the link-preview cards (tools/og.mjs).
@@ -50,11 +51,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
-
-      - name: Snapshot GitHub data
-        run: node tools/github-snapshot.mjs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Calendar feed
         run: node tools/events-feed.mjs
@@ -85,11 +81,19 @@ jobs:
             --exclude='skills-lock.json' \
             ./ _site/
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
+  deploy:
+    needs: build
+    if: github.repository == 'TheFreeCodeSubculture/fcs-site'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

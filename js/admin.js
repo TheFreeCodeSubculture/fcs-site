@@ -25,7 +25,7 @@ import {
   createSocialLink, updateSocialLink, deleteSocialLink,
   createCoreMember, updateCoreMember, deleteCoreMember,
   createBlogPost, updateBlogPost, deleteBlogPost, uploadBlogImage,
-  saveRepoKind, deleteRepoKind, refreshSite,
+  saveRepoKind, deleteRepoKind, refreshSite, getRepositories, refreshRepositories,
   analyticsReport, getAnalyticsAccess, setAnalyticsAccess,
   listProfiles, setProfileRole, removeMember, watchMyAccess,
   eventMail, listSubscriptions, addSubscribers, removeSubscription, listEmailSends,
@@ -754,6 +754,7 @@ const EDITORS = {
       duration_minutes: v.duration_minutes || 60,
     }),
     sortable: true,
+    rebuild: true,
     create: createClassSession,
     update: updateClassSession,
     remove: deleteClassSession,
@@ -938,14 +939,15 @@ const EVENT_FIELDS = [
   { name: "details", label: "Details", type: "textarea", wide: true },
 ];
 
-/* The post editor (js/blog-editor.js). A post that is, or was, live
- * changes the public site, so saving it starts a rebuild; a draft does not. */
-async function rebuildSite() {
+/* The static site is built by the Pages workflow. Anything the build reads
+ * (a live blog post, events.ics) starts a rebuild on save. `quiet` keeps a
+ * "Saved ..." toast from being followed by a second one. */
+async function rebuildSite({ quiet = false } = {}) {
   try {
     await refreshSite();
-    toast("Rebuilding the site. The change is live in about a minute.", "info");
+    if (!quiet) toast("Rebuilding the site. The change is live in about a minute.", "info");
   } catch {
-    toast("Saved, but the rebuild did not start. It will go live within 30 minutes.", "info");
+    toast("Saved, but the rebuild did not start. It will go live on the next deploy.", "info");
   }
 }
 
@@ -1644,6 +1646,7 @@ function openEditor(id, row, initial = null) {
       }
       await refresh();
       toast(`${row ? "Saved" : "Created"} ${editor.noun} ${quoted(editor.title(values))}.`);
+      if (editor.rebuild) rebuildSite({ quiet: true });
     },
     onDelete: row && (async () => {
       try {
@@ -1653,6 +1656,7 @@ function openEditor(id, row, initial = null) {
         toast(`Deleted ${editor.noun} ${quoted(editor.title(row))}.`, "delete", {
           action: { label: "Undo", run: () => undoDelete(editor.table, key, `${editor.noun} ${quoted(editor.title(row))}`) },
         });
+        if (editor.rebuild) rebuildSite({ quiet: true });
       } catch (err) {
         toast(err.message || "Could not delete. Only admins can delete.", "error");
       }
@@ -1753,6 +1757,7 @@ async function onCardDropped(evt) {
     if (moved && moved.stage !== stage) await updateEvent(id, { stage });
     await Promise.all(ids.map((cardId, index) => updateEvent(cardId, { sort_order: index })));
     toast(moved && moved.stage !== stage ? `Moved ${quoted(moved.title)} to ${stage}.` : "Order saved.", "info");
+    if (moved && moved.stage !== stage) rebuildSite({ quiet: true });
   } catch (err) {
     state.data.events = previous;
     renderBoard();
@@ -1788,6 +1793,7 @@ function openEventEditor(id) {
       else await createEvent(patch);
       await refresh();
       toast(`${event ? "Saved" : "Created"} event ${quoted(values.title)}.`);
+      rebuildSite({ quiet: true });
     },
     onDelete: event && (async () => {
       try {
@@ -1797,6 +1803,7 @@ function openEventEditor(id) {
         toast(`Deleted event ${quoted(event.title)}.`, "delete", {
           action: { label: "Undo", run: () => undoDelete("events", event.id, `event ${quoted(event.title)}`) },
         });
+        rebuildSite({ quiet: true });
       } catch (err) {
         toast(err.message || "Could not delete. Only admins can delete.", "error");
       }
@@ -2863,12 +2870,12 @@ function bindLinkMaker(scope) {
  *
  * Also here: pin projects to the top (in an order you set), link a
  * repo to a study group (it is listed on that group's card), and
- * "Refresh now", which re-reads GitHub and redeploys the site.
+ * "Refresh now", which refreshes the backend's cached list.
  *
- * The list comes from data/github.json (written by the deploy
- * workflow), or from GitHub's API when that file is empty (locally) or
- * on Refresh. Choices are saved to repo_kinds with upserts, never
- * deletes: only admins may delete, and editors curate repos as well.
+ * The list comes from the backend cache, or from GitHub's API when the
+ * backend is unreachable. Choices are saved to repo_kinds with upserts,
+ * never deletes: only admins may delete, and editors curate repos as
+ * well.
  * ================================================================== */
 
 const REPO_PLACES = [
@@ -2880,13 +2887,11 @@ const REPO_PLACES = [
 async function loadOrgRepos({ fresh = false } = {}) {
   if (state.orgRepos && !fresh) return state.orgRepos;
   let repos = [];
-  if (!fresh) {
-    try {
-      const snap = await (await fetch("data/github.json", { cache: "no-cache" })).json();
-      repos = Array.isArray(snap.repos) ? snap.repos : [];
-    } catch {
-      /* no snapshot: ask GitHub below */
-    }
+  try {
+    const snapshot = fresh ? await refreshRepositories() : await getRepositories();
+    if (snapshot && Array.isArray(snapshot.repos)) repos = snapshot.repos;
+  } catch {
+    /* backend unavailable: ask GitHub below */
   }
   if (!repos.length) {
     const res = await fetch(`https://api.github.com/orgs/${encodeURIComponent(window.GITHUB_ORG)}/repos?per_page=100&sort=pushed`, {
@@ -2939,7 +2944,7 @@ async function renderReposPage(page) {
         ${[["all", `All (${repos.length})`], ...REPO_PLACES.map(([k, label]) => [k, `${k === "hidden" ? label : `${label}s`} (${count(k)})`])].map(([value, label]) => `
           <button type="button" class="chip${filter === value ? " is-active" : ""}" aria-pressed="${filter === value}" data-repo-filter="${value}">${label}</button>`).join("")}
       </div>
-      <button type="button" class="btn" id="repo-refresh" title="Re-read the list from GitHub and redeploy the site">${icon("undo")}<span>Refresh now</span></button>
+      <button type="button" class="btn" id="repo-refresh" title="Re-read the list from GitHub">${icon("undo")}<span>Refresh now</span></button>
     </div>
     ${shown.length ? `<ol class="list repo-list">${shown.map((r) => {
       const place = placeOf(r);
@@ -3019,9 +3024,8 @@ async function renderReposPage(page) {
     try {
       await busy(button, "Refreshing…", async () => {
         await loadOrgRepos({ fresh: true });
-        await refreshSite();
       });
-      toast("Re-read from GitHub. The site is redeploying and will match in about two minutes.", "success");
+      toast("Re-read from GitHub. Repositories are up to date.", "success");
     } catch (err) {
       toast(err.message || "Could not refresh.", "error");
     }
@@ -3307,6 +3311,7 @@ async function undoDelete(table, rowId, label) {
     renderSidebar();
     renderPage();
     toast(`Restored ${label}.`, "success");
+    if (table === "events" || table === "class_sessions") rebuildSite({ quiet: true });
   } catch (err) {
     toast(err.message || "Could not restore.", "error");
   }

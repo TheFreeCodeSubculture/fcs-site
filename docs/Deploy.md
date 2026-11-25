@@ -98,7 +98,6 @@ fcs-site/
 │   ├── blog-build.mjs      Write blog static pages
 │   ├── og.mjs              Draw OG cards (satori + sharp)
 │   ├── events-feed.mjs     Write events.ics
-│   ├── github-snapshot.mjs Write data/github.json
 │   ├── link-meta.mjs       Fetch bookmark metadata
 │   ├── email-templates.mjs Push email templates to Supabase Auth
 │   ├── build-cover-gallery.mjs Build cover-gallery.json
@@ -128,8 +127,6 @@ fcs-site/
 │   ├── covers/             Cover gallery texture PNGs
 │   ├── fonts/              Latin Modern Mono + Garet (vendored)
 │   └── cover-gallery.json  Cover picker catalogue
-├── data/
-│   └── github.json         GitHub org snapshot (written by workflow)
 ├── blog/                   Static output (written by blog-build.mjs)
 │   ├── index.html
 │   ├── latest.html         The three newest posts (injected into index.html)
@@ -220,18 +217,6 @@ Each post's card URL includes `?v=<updated_at>` so social networks re-fetch on e
 
 Writes `events.ics` from all published events (all stages except `draft`). Used for the calendar subscribe feature.
 
-### `github-snapshot.mjs`
-
-Fetches all public repos from the GitHub API and writes `data/github.json`. Run by the workflow with its own `GITHUB_TOKEN`; unauthenticated fetches hit the 60-req/hr limit.
-
-```json
-{
-  "repos": [ { "id", "name", "description", "url", "stargazers_count", … } ],
-  "commits": [ { "repo", "message", "author", "date", "url" } ],
-  "fetched_at": "ISO timestamp"
-}
-```
-
 ### `link-meta.mjs`
 
 Fetches `<title>`, description, and OG image for URLs used in `@[bookmark]` blocks. Called by `blog-build.mjs` for the published version (the editor uses microlink.io at edit time).
@@ -268,24 +253,23 @@ The workflow lives at `.github/workflows/pages.yml`.
 
 **Triggers:**
 - Every push to `master`
-- Every 30 minutes (`schedule: cron: '*/30 * * * *'`)
 - Manual dispatch from the Actions tab
+- A `refresh-site` dispatch from the admin panel when a published post, event or class session changes
 
 **Steps:**
 1. `npm ci`
 2. `npm test` (Node built-in test runner on `js/lib/*.test.js`)
-3. `node tools/github-snapshot.mjs` → `data/github.json`
-4. `node tools/events-feed.mjs` → `events.ics`
-5. `node tools/blog-build.mjs` → `blog/`
-6. Upload and deploy with the GitHub Pages action
+3. `node tools/events-feed.mjs` → `events.ics`
+4. `node tools/blog-build.mjs` → `blog/`
+5. Upload the artifact, then deploy it in a separate job
 
 **One-time setup:**
 - Settings → Pages → Build and deployment → Source: **GitHub Actions**
 
-The `GITHUB_TOKEN` provided by GitHub Actions is used by `github-snapshot.mjs` to fetch the org's repos with authentication (5000 req/hr instead of 60).
+Repository data is not part of the deploy. The backend serves `GET /api/public/repositories` from a ten-minute in-memory cache and uses `GITHUB_READ_TOKEN` (optional) for a higher GitHub rate limit. Editors can refresh that cache from the Repositories page without redeploying the site.
 
 > [!NOTE]
-> GitHub pauses scheduled workflows in repositories with no activity for 60 days. Any push re-enables them. The site falls back to the GitHub API in the meantime (60 req/hr per visitor IP).
+> There is no polling schedule. The backend's `refresh-site` route dispatches this workflow with `GITHUB_DISPATCH_TOKEN`; without that secret the admin panel still saves changes, but the static build (blog pages, `events.ics`) waits for the next push.
 
 `.nojekyll` prevents GitHub Pages from treating the site as a Jekyll project.
 
@@ -457,7 +441,7 @@ Photos are **hotlinked** from Unsplash (not uploaded to `fcs-assets`). Photograp
 
 ## 11. Calendar Feed
 
-The deploy workflow writes `events.ics` every 30 minutes via `tools/events-feed.mjs`. It includes all published events (all stages except `draft`).
+The deploy workflow writes `events.ics` via `tools/events-feed.mjs`, and saving or deleting an event in the admin panel starts a deploy. It includes all published events (all stages except `draft`).
 
 The events section's "Add to your calendar" menu subscribes to it:
 - **Google Calendar:** a URL built dynamically from the site's `events.ics` path.
@@ -537,8 +521,7 @@ Saves screenshots to `.shots/` for visual regression comparison.
 
 | Service | Limit | Degradation |
 |---------|-------|-------------|
-| GitHub API (unauthenticated) | 60 req/hr per visitor IP | Falls back to `data/github.json` (refreshed by workflow every 30 min). If that file is also stale, the Projects section shows a link to the org page. |
-| GitHub API (workflow token) | 5000 req/hr | Used only by the deploy workflow; not visitor-facing. |
+| GitHub API (backend cache) | 60 req/hr unauthenticated, 5000 with `GITHUB_READ_TOKEN` | The backend caches the organisation's repositories for 10 minutes. If GitHub is unreachable, the last good snapshot is served; with no snapshot, the page falls back to a direct GitHub API call. |
 | Supabase free tier | Pauses after inactivity | All sections fall back to seed data in `js/data.js`. Reactivate from the Supabase dashboard. |
 | Supabase Realtime | Included in free tier | Used for live role changes and analytics. Degrades silently if the connection drops. |
 | microlink.io (bookmark previews in editor) | ~50 new URLs/day per person | Falls back to showing just the URL if the fetch fails. The deploy-time `link-meta.mjs` is not rate-limited. |

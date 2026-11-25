@@ -74,6 +74,8 @@ that is `http://localhost:8000` (not `127.0.0.1`).
 | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | outbound email |
 | `GITHUB_ASSETS_TOKEN` | writes blog images to `fcs-assets` |
 | `GITHUB_DISPATCH_TOKEN` | triggers the Pages rebuild |
+| `GITHUB_ORG` | organisation whose public repositories are listed (default `TheFreeCodeSubculture`) |
+| `GITHUB_READ_TOKEN` | optional; reads public repositories with a 5,000 req/hr limit instead of 60 |
 | `UNSPLASH_ACCESS_KEY` | optional cover picker |
 
 Production reads `/srv/fcs-api/shared/.env` (mode `600`, owned by `fcs`).
@@ -168,10 +170,11 @@ applied migration in the repository.
 - `/api/account/*` — member profile editing, avatar upload/removal and the
   all-events email preference; requires a verified account.
 - `/api/public/*` — published events, classes, resources, groups, links,
-  opted-in member profiles, repositories and blog posts.
+  opted-in member profiles, the cached GitHub repository list and blog posts.
 - `/api/admin/*` — CRUD for every content table, team and role management,
   blog drafts and versions, activity history and restore, analytics,
-  photo uploads and GitHub actions.
+  photo uploads and GitHub actions (image upload, site dispatch and
+  repository-cache refresh).
 - `/api/event-mail/*` — event subscription confirmation and unsubscribe.
 - `/api/integrations/*` — Medium feed/story/import and the GitHub refresh.
 - `/api/track` — first-party, cookie-free pageview and event collection.

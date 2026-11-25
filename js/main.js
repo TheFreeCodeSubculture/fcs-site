@@ -8,8 +8,9 @@
  *
  * Content comes from the database via js/api.js, falling back to the
  * SEED_* arrays when the backend is unconfigured or unreachable. The
- * repository list comes from the public GitHub API. No build step, no
- * framework — this file runs as-is in the browser.
+ * repository list comes from the backend as well, with the public
+ * GitHub API as a fallback. No build step, no framework — this file
+ * runs as-is in the browser.
  *
  * Edit site content in the admin panel at /admin, not in this file.
  * ------------------------------------------------------------------
@@ -40,7 +41,8 @@ import {
 watchFavicons();
 import {
   getEvents, getClassSessions, getResources,
-  getStudyGroups, getSocialLinks, getRepoKinds, getCoreMembers, eventMail,
+  getStudyGroups, getSocialLinks, getRepoKinds, getCoreMembers, getRepositories,
+  eventMail,
 } from "./api.js";
 
 let allEvents = [];
@@ -206,29 +208,26 @@ async function cachedJSON(url, headers = {}) {
   }
 }
 
-/* data/github.json is written by the deploy workflow every 30 minutes
- * with the repository's own token (tools/github-snapshot.mjs). Reading
- * it means no visitor spends GitHub's 60-an-hour anonymous allowance.
- * Missing or older than three hours (a stalled workflow, or local
- * development with the placeholder): use the live API instead. */
-const SNAPSHOT_MAX_AGE_MS = 3 * 60 * 60 * 1000;
-let snapshotRequest = null;
-
-function githubSnapshot() {
-  if (!snapshotRequest) {
-    snapshotRequest = fetch("data/github.json", { cache: "no-cache" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((snap) => {
-        const age = snap && snap.fetched_at ? Date.now() - new Date(snap.fetched_at).getTime() : Infinity;
-        return age < SNAPSHOT_MAX_AGE_MS && Array.isArray(snap.repos) ? snap : null;
-      })
-      .catch(() => null);
-  }
-  return snapshotRequest;
-}
-
+/* Repositories come from the backend, which caches GitHub's answer for ten
+ * minutes (GET /api/public/repositories). If the backend is unreachable,
+ * fall back to GitHub's public API; it is rate-limited per visitor, so that
+ * is only a safety net. */
 function githubJSON(path) {
   return cachedJSON(`https://api.github.com${path}`, { Accept: "application/vnd.github+json" });
+}
+
+async function repositorySnapshot() {
+  const fromBackend = await getRepositories();
+  if (fromBackend && Array.isArray(fromBackend.repos)) return fromBackend;
+
+  try {
+    const repos = await githubJSON(
+      `/orgs/${encodeURIComponent(window.GITHUB_ORG)}/repos?per_page=100&sort=updated`
+    );
+    return { repos, latest_commit_repo: null, latest_commit: null };
+  } catch {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -240,10 +239,9 @@ async function loadRepositories() {
   if (!statusEl || !gridEl) return;
 
   try {
-    const snapshot = await githubSnapshot();
-    const repos = snapshot
-      ? snapshot.repos.map((repo) => ({ ...repo }))
-      : await githubJSON(`/orgs/${encodeURIComponent(window.GITHUB_ORG)}/repos?per_page=100&sort=updated`);
+    const snapshot = await repositorySnapshot();
+    if (!snapshot) throw new Error("GitHub repositories are unavailable.");
+    const repos = snapshot.repos.map((repo) => ({ ...repo }));
     if (!Array.isArray(repos) || repos.length === 0) {
       statusEl.textContent = "No public repositories were found.";
       return;
@@ -271,7 +269,7 @@ async function loadRepositories() {
     statusEl.hidden = true;
     gridEl.hidden = false;
     renderActivityTicker(repos);
-    setMetaCommit(repos);
+    setMetaCommit(repos, snapshot);
 
     // Re-render so the Resources section picks up the GitHub-sourced
     // rows alongside the database ones.
@@ -739,9 +737,9 @@ function bindIcs() {
   icsBound = true;
 }
 
-/* The calendar feed: events.ics, rebuilt by the deploy workflow every 30
- * minutes (tools/events-feed.mjs). Subscribing, rather than importing a
- * file, is what keeps someone's calendar up to date. */
+/* The calendar feed: events.ics, rebuilt by the deploy workflow
+ * (tools/events-feed.mjs); saving an event in the admin panel starts one.
+ * Subscribing, rather than importing a file, keeps a calendar up to date. */
 function bindCalendarMenu() {
   const menu = document.getElementById("cal-menu");
   if (!menu) return;
@@ -1104,7 +1102,7 @@ function metaSlot(name) {
  * the first line of the message (the column truncates it), and how
  * long ago, in the column label. Falls back to the repo and push time
  * if the commit itself cannot be read. */
-async function setMetaCommit(repos) {
+async function setMetaCommit(repos, snapshot = null) {
   const slot = metaSlot("commit");
   const latest = repos
     .filter((repo) => repo.pushed_at)
@@ -1117,12 +1115,12 @@ async function setMetaCommit(repos) {
   if (label) label.textContent = `Last commit, ${timeAgo(latest.pushed_at)}`;
 
   try {
-    const snapshot = await githubSnapshot();
-    const [commit] = snapshot && snapshot.latest_commit_repo === latest.name && snapshot.latest_commit
-      ? [snapshot.latest_commit]
-      : await githubJSON(
+    const covered = snapshot && snapshot.latest_commit_repo === latest.name;
+    const commit = covered
+      ? snapshot.latest_commit
+      : (await githubJSON(
         `/repos/${encodeURIComponent(window.GITHUB_ORG)}/${encodeURIComponent(latest.name)}/commits?per_page=1`
-      );
+      ))[0];
     if (!commit) return;
     const message = String(commit.commit.message || "").split("\n")[0].trim();
     const when = commit.commit.committer && commit.commit.committer.date;

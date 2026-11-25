@@ -109,3 +109,203 @@ export async function refreshSite() {
 
   return { ok: true };
 }
+
+/* ---- public repositories --------------------------------------------- */
+
+const REPOSITORY_CACHE_MS = 10 * 60 * 1000;
+const REPOSITORY_RETRY_MS = 30 * 1000;
+
+export interface PublicRepository {
+  name: string;
+  html_url: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  updated_at: string;
+  pushed_at: string | null;
+  archived: boolean;
+}
+
+export interface RepositorySnapshot {
+  fetched_at: string;
+  org: string;
+  repos: PublicRepository[];
+  latest_commit_repo: string | null;
+  latest_commit: {
+    html_url: string;
+    commit: {
+      message: string;
+      committer: { date: string } | null;
+    };
+  } | null;
+}
+
+interface GitHubRepository extends PublicRepository {
+  private?: boolean;
+}
+
+interface GitHubCommit {
+  html_url: string;
+  commit: {
+    message: string;
+    committer: { date: string } | null;
+  };
+}
+
+let repositoryCache: {
+  snapshot: RepositorySnapshot;
+  expiresAt: number;
+} | null = null;
+let repositoryLoad: Promise<RepositorySnapshot> | null = null;
+let repositoryError: { error: unknown; until: number } | null = null;
+
+/* Reads a public GitHub resource. GITHUB_READ_TOKEN is optional: with it
+ * the limit is 5,000 requests an hour instead of 60. */
+async function githubRead<T>(path: string): Promise<T> {
+  const headers: Record<string, string> = {
+    accept: "application/vnd.github+json",
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "fcs-backend",
+  };
+  if (config.GITHUB_READ_TOKEN) {
+    headers.authorization = `Bearer ${config.GITHUB_READ_TOKEN}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`https://api.github.com${path}`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new HttpError(
+      502,
+      "GitHub could not be reached. Try again in a moment.",
+    );
+  }
+
+  if (!response.ok) {
+    const limited = response.status === 403 || response.status === 429;
+    throw new HttpError(
+      502,
+      limited
+        ? "GitHub's hourly limit is used up. Try again in a few minutes."
+        : `GitHub answered ${response.status}.`,
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchRepositorySnapshot(): Promise<RepositorySnapshot> {
+  const org = config.GITHUB_ORG;
+  // The organisation is expected to stay under 100 public repositories.
+  const all = await githubRead<GitHubRepository[]>(
+    `/orgs/${encodeURIComponent(org)}/repos?per_page=100&sort=updated&type=public`,
+  );
+  const repos = all
+    .filter((repo) => !repo.private)
+    .map(
+      ({
+        name,
+        html_url,
+        description,
+        language,
+        stargazers_count,
+        updated_at,
+        pushed_at,
+        archived,
+      }) => ({
+        name,
+        html_url,
+        description,
+        language,
+        stargazers_count,
+        updated_at,
+        pushed_at,
+        archived,
+      }),
+    );
+
+  const latest = [...repos]
+    .filter((repo) => repo.pushed_at)
+    .sort(
+      (a, b) =>
+        new Date(b.pushed_at || 0).getTime() -
+        new Date(a.pushed_at || 0).getTime(),
+    )[0];
+
+  let latest_commit: RepositorySnapshot["latest_commit"] = null;
+  if (latest) {
+    try {
+      const commits = await githubRead<GitHubCommit[]>(
+        `/repos/${encodeURIComponent(org)}/${encodeURIComponent(latest.name)}/commits?per_page=1`,
+      );
+      const commit = commits[0];
+      if (commit) {
+        latest_commit = {
+          html_url: commit.html_url,
+          commit: {
+            message: commit.commit.message,
+            committer: commit.commit.committer,
+          },
+        };
+      }
+    } catch {
+      // The repository list is still useful without the newest commit.
+    }
+  }
+
+  return {
+    fetched_at: new Date().toISOString(),
+    org,
+    repos,
+    latest_commit_repo: latest ? latest.name : null,
+    latest_commit,
+  };
+}
+
+/* Cached so visitors never spend GitHub's anonymous allowance. A failed
+ * refresh keeps serving the last good snapshot; without one it retries
+ * after a short pause instead of hammering GitHub on every request. */
+export async function publicRepositories({
+  fresh = false,
+}: { fresh?: boolean } = {}): Promise<RepositorySnapshot> {
+  const now = Date.now();
+
+  if (!fresh) {
+    if (repositoryCache && repositoryCache.expiresAt > now) {
+      return repositoryCache.snapshot;
+    }
+    if (repositoryError && repositoryError.until > now) {
+      if (repositoryCache) return repositoryCache.snapshot;
+      throw repositoryError.error;
+    }
+  }
+
+  if (!repositoryLoad) {
+    repositoryLoad = fetchRepositorySnapshot()
+      .then((snapshot) => {
+        repositoryCache = {
+          snapshot,
+          expiresAt: Date.now() + REPOSITORY_CACHE_MS,
+        };
+        repositoryError = null;
+        return snapshot;
+      })
+      .catch((error: unknown) => {
+        repositoryError = { error, until: Date.now() + REPOSITORY_RETRY_MS };
+        throw error;
+      })
+      .finally(() => {
+        repositoryLoad = null;
+      });
+  }
+
+  try {
+    return await repositoryLoad;
+  } catch (error) {
+    if (repositoryCache) return repositoryCache.snapshot;
+    throw error;
+  }
+}
